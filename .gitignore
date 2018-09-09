@@ -1,0 +1,17 @@
+*.a
+*.so
+*~
+
+data/
+bin/
+lib/
+*cmake-build-debug*/
+*build*/
+*install*/
+.idea/
+
+# for logging
+*INFO*
+*WARNING*
+*ERROR*
+*FATAL*

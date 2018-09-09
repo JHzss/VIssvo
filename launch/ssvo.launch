@@ -1,0 +1,7 @@
+<launch>
+
+    <node name="ssvo" pkg="ssvo" type="monoVO_live" output="screen">
+       <param name="config_file" type="string" value="/home/jh/catkin_ws/src/ssvo/config/euroc.yaml" />
+    </node>
+
+</launch>
