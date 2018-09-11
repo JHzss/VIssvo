@@ -161,6 +161,10 @@ public:
 
     SE3d optimal_Tcw_;//! for optimization
 
+    SE3d optimal_Twb_;//! for optimization
+
+    double PVR[9]; //! for optimization
+
     double disparity_;//! for depth filter
 
     cv::Mat gray_image;

@@ -8,14 +8,30 @@ namespace ssvo{
 
 void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2, bool report, bool verbose)
 {
-    kf1->optimal_Tcw_ = kf1->Tcw();
-    kf2->optimal_Tcw_ = kf2->Tcw();
+//    kf1->optimal_Tcw_ = kf1->Tcw();
+//    kf2->optimal_Tcw_ = kf2->Tcw();
+
+    kf1->optimal_Twb_ = kf1->Twb();
+    kf2->optimal_Twb_ = kf2->Twb();
+
+    cout<<" test id:"<<endl;
+    cout<<kf1->frame_id_<<endl;
+    cout<<kf2->frame_id_<<endl;
 
     ceres::Problem problem;
-    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
-    problem.AddParameterBlock(kf1->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
-    problem.AddParameterBlock(kf2->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
-    problem.SetParameterBlockConstant(kf1->optimal_Tcw_.data());
+//    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
+//    problem.AddParameterBlock(kf1->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+//    problem.AddParameterBlock(kf2->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+//    problem.SetParameterBlockConstant(kf1->optimal_Tcw_.data());
+
+    ceres::LocalParameterization* pvrpose = new PosePVR();
+    problem.AddParameterBlock(kf1->PVR, 9, pvrpose);
+    problem.AddParameterBlock(kf2->PVR, 9, pvrpose);
+    problem.SetParameterBlockConstant(kf1->PVR);
+
+    cout<<"kf1 pose------------------------------------------------------------BEFORE:"<<endl<<kf1->optimal_Twb_.rotationMatrix()<<endl<<kf1->optimal_Twb_.translation()<<endl;
+
+    cout<<"kf2 pose------------------------------------------------------------BEFORE:"<<endl<<kf2->optimal_Twb_.rotationMatrix()<<endl<<kf2->optimal_Twb_.translation()<<endl;
 
     std::vector<Feature::Ptr> fts1;
     kf1->getFeatures(fts1);
@@ -36,10 +52,13 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
         mpts.push_back(mpt);
 
         ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft1->fn_[0]/ft1->fn_[2], ft1->fn_[1]/ft1->fn_[2]);//, 1.0/(1<<ft1->level_));
-        problem.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+//        problem.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+        problem.AddResidualBlock(cost_function1, NULL, kf1->PVR, mpt->optimal_pose_.data());
 
         ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionErrorSE3::Create(ft2->fn_[0]/ft2->fn_[2], ft2->fn_[1]/ft2->fn_[2]);//, 1.0/(1<<ft2->level_));
-        problem.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+//        problem.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+        problem.AddResidualBlock(cost_function2, NULL, kf2->PVR, mpt->optimal_pose_.data());
+
     }
 
 
@@ -54,11 +73,31 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
     ceres::Solve(options, &problem, &summary);
 
     //! update pose
-    kf2->setTcw(kf2->optimal_Tcw_);
+
+    Vector3d t = Vector3d(kf2->PVR[0],kf2->PVR[1],kf2->PVR[2]);
+    Vector3d w = Vector3d(kf2->PVR[6],kf2->PVR[7],kf2->PVR[8]);
+
+    Matrix3d ttttt = Sophus::SO3d::exp(w).matrix();
+
+    SE3d tmp(ttttt,t);
+
+//    kf2->optimal_Twb_ = tmp;
+
+//    kf2->optimal_Twb_.translation() = t;
+//    kf2->optimal_Twb_.rotationMatrix() = ttttt;
+
+    kf2->setTwb(tmp);
+
+    cout<<"kf1 pose------------------------------------------------------------after:"<<endl<<kf1->optimal_Twb_.rotationMatrix()<<endl<<kf1->optimal_Twb_.translation()<<endl;
+    cout<<"kf2 pose------------------------------------------------------------after:"<<endl<<kf2->optimal_Twb_.rotationMatrix()<<endl<<kf1->optimal_Twb_.translation()<<endl;
+//    kf2->setTcw(kf2->optimal_Tcw_);
+
     std::for_each(mpts.begin(), mpts.end(), [](MapPoint::Ptr mpt){mpt->setPose(mpt->optimal_pose_);});
 
     //! Report
     reportInfo(problem, summary, report, verbose);
+
+    waitKey(0);
 }
 
 void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, int min_shared_fts, bool report, bool verbose)
@@ -93,21 +132,39 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     }
 
     ceres::Problem problem;
-    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
+//    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
 
-    for(const KeyFrame::Ptr &kf : fixed_keyframe)
+//    for(const KeyFrame::Ptr &kf : fixed_keyframe)
+//    {
+//        kf->optimal_Tcw_ = kf->Tcw();
+//        problem.AddParameterBlock(kf->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+//        problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
+//    }
+//
+//    for(const KeyFrame::Ptr &kf : actived_keyframes)
+//    {
+//        kf->optimal_Tcw_ = kf->Tcw();
+//        problem.AddParameterBlock(kf->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+//        if(kf->id_ <= 1)
+//            problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
+//    }
+
+
+    ceres::LocalParameterization* pvrpose = new PosePVR();
+
+
+        for(const KeyFrame::Ptr &kf : fixed_keyframe)
     {
-        kf->optimal_Tcw_ = kf->Tcw();
-        problem.AddParameterBlock(kf->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
-        problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
+        problem.AddParameterBlock(kf->PVR, 9, pvrpose);
+        problem.SetParameterBlockConstant(kf->PVR);
     }
 
     for(const KeyFrame::Ptr &kf : actived_keyframes)
     {
-        kf->optimal_Tcw_ = kf->Tcw();
-        problem.AddParameterBlock(kf->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+//        kf->optimal_Tcw_ = kf->Tcw();
+        problem.AddParameterBlock(kf->PVR, 9, pvrpose);
         if(kf->id_ <= 1)
-            problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
+            problem.SetParameterBlockConstant(kf->PVR);
     }
 
     double scale = Config::imagePixelUnSigma() * 2;
@@ -122,7 +179,10 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
             const KeyFrame::Ptr &kf = item.first;
             const Feature::Ptr &ft = item.second;
             ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
-            problem.AddResidualBlock(cost_function1, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+//            problem.AddResidualBlock(cost_function1, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+            problem.AddResidualBlock(cost_function1, lossfunction, kf->PVR, mpt->optimal_pose_.data());
+
+
         }
     }
 
@@ -134,9 +194,19 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     ceres::Solve(options, &problem, &summary);
 
     //! update pose
+//    for(const KeyFrame::Ptr &kf : actived_keyframes)
+//    {
+//        kf->setTcw(kf->optimal_Tcw_);
+//    }
+
     for(const KeyFrame::Ptr &kf : actived_keyframes)
     {
-        kf->setTcw(kf->optimal_Tcw_);
+        Vector3d t = Vector3d(kf->PVR[0],kf->PVR[1],kf->PVR[2]);
+        Vector3d w = Vector3d(kf->PVR[6],kf->PVR[7],kf->PVR[8]);
+
+        kf->optimal_Twb_.translation() = t;
+        kf->optimal_Twb_.rotationMatrix() = Sophus_new::SO3::exp(w).matrix();
+        kf->setTwb(kf->optimal_Twb_);
     }
 
     //! update mpts & remove mappoint with large error
@@ -339,68 +409,14 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 {
     static const size_t OPTIMAL_MPTS = 150;
 
-    double PVRi[9];
-    double PVRj[9];
-    double bias_i[6];
-    double bias_j[6];
 
-    /*
-    double last_frame_ba[1][3];
-    double last_frame_bg[1][3];
-    double frame_ba[1][3];
-    double frame_bg[1][3];
-
-    double vbabg[2][9];
-
-    vbabg[0][0] = (last_frame->v).x();
-    vbabg[0][1] = (last_frame->v).y();
-    vbabg[0][2] = (last_frame->v).z();
-    vbabg[0][3] = last_frame->ba.x();
-    vbabg[0][4] = last_frame->ba.y();
-    vbabg[0][5] = last_frame->ba.z();
-
-    vbabg[0][6] = last_frame->bg.x();
-    vbabg[0][7] = last_frame->bg.y();
-    vbabg[0][8] = last_frame->bg.z();
-
-    vbabg[1][0] = (frame->v).x();
-    vbabg[1][1] = (frame->v).y();
-    vbabg[1][2] = (frame->v).z();
-    vbabg[1][3] = frame->ba.x();
-    vbabg[1][4] = frame->ba.y();
-    vbabg[1][5] = frame->ba.z();
-
-    vbabg[1][6] = frame->bg.x();
-    vbabg[1][7] = frame->bg.y();
-    vbabg[1][8] = frame->bg.z();
-     */
-
-
-    /*
-    //! last_frame->ba 还是 last_frame->preintegration->ba ?
-//    last_frame_ba[0][0]=last_frame->ba.x();
-//    last_frame_ba[0][1]=last_frame->ba.y();
-//    last_frame_ba[0][2]=last_frame->ba.z();
-//
-//    last_frame_bg[0][0]=last_frame->bg.x();
-//    last_frame_bg[0][1]=last_frame->bg.y();
-//    last_frame_bg[0][2]=last_frame->bg.z();
-//
-//    frame_ba[0][0]=frame->ba.x();
-//    frame_ba[0][1]=frame->ba.y();
-//    frame_ba[0][2]=frame->ba.z();
-//
-//    frame_bg[0][0]=frame->bg.x();
-//    frame_bg[0][1]=frame->bg.y();
-//    frame_bg[0][2]=frame->bg.z();
-     */
-
-    frame->optimal_Tcw_ = frame->Tcw();
+//    frame->optimal_Tcw_ = frame->Tcw();
 
     ceres::Problem problem;
-    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
-    problem.AddParameterBlock(frame->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
-
+    ceres::LocalParameterization* pvrpose = new PosePVR();
+//    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
+//    problem.AddParameterBlock(frame->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+      problem.AddParameterBlock(frame->PVR, 9, pvrpose);
 
     //!by jh
 //    problem.AddParameterBlock(last_frame_ba[0],3);
@@ -424,7 +440,8 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 
         mpt->optimal_pose_ = mpt->pose();
         ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
-        res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+//        res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+        res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->PVR, mpt->optimal_pose_.data());
         problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
     }
 
@@ -456,13 +473,14 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
             seed->optimal_pose_.noalias() = seed->kf->Twc() * (seed->fn_ref / seed->getInvDepth());
 
             ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(seed->fn_ref[0]/seed->fn_ref[2], seed->fn_ref[1]/seed->fn_ref[2], seed->getInfoWeight());
-            res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), seed->optimal_pose_.data());
+//            res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), seed->optimal_pose_.data());
+            res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->PVR, seed->optimal_pose_.data());
             problem.SetParameterBlockConstant(seed->optimal_pose_.data());
 
         }
     }
 
-        ceres::LocalParameterization* PVRpose = new PosePVR();
+//        ceres::LocalParameterization* PVRpose = new PosePVR();
     //! by jh
     if(vio)
     {
@@ -508,9 +526,16 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 
     //! update pose
 
-        cout<<"优化结果："<<endl<<frame->optimal_Tcw_.translation()<<endl;
+//        cout<<"优化结果："<<endl<<frame->optimal_Tcw_.translation()<<endl;
 
-    frame->setTcw(frame->optimal_Tcw_);
+        Vector3d t = Vector3d(frame->PVR[0],frame->PVR[1],frame->PVR[2]);
+        Vector3d w = Vector3d(frame->PVR[6],frame->PVR[7],frame->PVR[8]);
+
+        frame->optimal_Twb_.translation() = t;
+        frame->optimal_Twb_.rotationMatrix() = Sophus_new::SO3::exp(w).matrix();
+        frame->setTwb(frame->optimal_Twb_);
+
+//    frame->setTcw(frame->optimal_Tcw_);
 
     //! Report
     reportInfo(problem, summary, report, verbose);

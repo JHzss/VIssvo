@@ -533,9 +533,14 @@ void Initializer::createInitalMap(double map_scale)
     SE3d T_cur_from_ref(T_.topLeftCorner(3,3), T_.rightCols(1));
     SE3d T_ref_from_cur = T_cur_from_ref.inverse();
     T_ref_from_cur.translation() = T_ref_from_cur.translation() * scale;
+
+    cout<<"T_ref_from_cur.rotation(): "<<endl<<T_ref_from_cur.rotationMatrix()<<endl;
+    cout<<"T_ref_from_cur.translation(): "<<endl<<T_ref_from_cur.translation()<<endl;
 //    T_ref_from_cur.translation() = T_ref_from_cur.translation();
     cand_ref_->frame->setPose(Matrix3d::Identity(), Vector3d::Zero()); ///首帧作为世界坐标系
     cand_cur_->frame->setPose(T_ref_from_cur);
+
+    cout<<cand_cur_->frame->id_<<endl;
 
     //! create and rescale map points
     for(size_t i = 0; i < N; ++i)

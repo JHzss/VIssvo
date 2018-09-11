@@ -40,19 +40,34 @@ namespace ssvo
     //在一个类里定义了一个const成员函数后，则此函数不能修改类中的成员变量，
     bool PosePVR::Plus(const double *x, const double *delta, double *x_plus_delta) const
     {
+//        cout<<"plusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplus"<<endl;
+        Eigen::Map<const Eigen::Vector3d > p(x);
+        Eigen::Map<const Eigen::Vector3d > v(x+3);
+        Eigen::Map<const Eigen::Vector3d > phi(x+6);
 
         Eigen::Map<const Eigen::Vector3d > p_dt(delta);
         Eigen::Map<const Eigen::Vector3d > v_dt(delta+3);
         Eigen::Map<const Eigen::Vector3d > phi_dt(delta+6);
+
+//        cout<<"first -------------"<<p<<" "<<v<<" "<<phi<<endl;
+//        cout<<"delta -------------"<<p_dt<<" "<<v_dt<<" "<<phi_dt<<endl;
+
+
+
 
 
         Eigen::Map<Eigen::Vector3d > p_re(x_plus_delta);
         Eigen::Map<Eigen::Vector3d > v_re(x_plus_delta+3);
         Eigen::Map<Eigen::Vector3d > phi_re(x_plus_delta+6);
 
-        p_re = p_dt;
-        v_re = v_dt;
-        phi_re = phi_dt;
+        p_re = p + p_dt;
+        v_re = v + v_dt;
+
+        Matrix3d r1 = Sophus_new::SO3::exp(phi).matrix() * Sophus_new::SO3::exp(phi_dt).matrix();
+        Sophus_new::SO3 so3_tmp(r1);
+        phi_re = so3_tmp.log();
+
+//        cout<<"result -------------"<<p_re<<" "<<v_re<<" "<<phi_re <<endl;
 
         /*
         frame_->v += v_dt;

@@ -5,6 +5,7 @@
 #ifndef SSVO_POSEPVR_H
 #define SSVO_POSEPVR_H
 
+#include "global.hpp"
 #include <eigen3/Eigen/Dense>
 #include <ceres/ceres.h>
 #include "so3.h"

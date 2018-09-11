@@ -13,6 +13,7 @@
 #include "preintegration.h"
 #include "utility.h"
 
+
 namespace ssvo {
 
 class Optimizer: public noncopyable
@@ -91,7 +92,8 @@ struct ReprojectionError {
     double observed_y_;
 };
 
-class ReprojectionErrorSE3 : public ceres::SizedCostFunction<2, 7, 3>
+//class ReprojectionErrorSE3 : public ceres::SizedCostFunction<2, 7, 3>
+class ReprojectionErrorSE3 : public ceres::SizedCostFunction<2, 9, 3>
 {
 public:
 
@@ -101,21 +103,39 @@ public:
     virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
     {
         //! In Sophus, stored in the form of [q, t]
-        Eigen::Map<const Eigen::Quaterniond> q(parameters[0]);
-        Eigen::Map<const Eigen::Vector3d> t(parameters[0] + 4);
-        Eigen::Map<const Eigen::Vector3d> p(parameters[1]);
+//        Eigen::Map<const Eigen::Quaterniond> q(parameters[0]);
+//        Eigen::Map<const Eigen::Vector3d> t(parameters[0] + 4);
+//        Eigen::Map<const Eigen::Vector3d> p(parameters[1]);
 
 
+        //todo 从参数块读取数据
+        Eigen::Map<const Eigen::Vector3d> Pwb(parameters[0]);
+        Eigen::Map<const Eigen::Vector3d> Vw(parameters[0] + 3);
+        Eigen::Map<const Eigen::Vector3d> PHIwb(parameters[0] + 6);
+
+        //Mappoint Pw
+        Eigen::Map<const Eigen::Vector3d> Pw(parameters[1]);
         //todo 求Pc 即 p1
+        Matrix3d Rcb = eigen_Rc2b.transpose();
+        Vector3d Pbc = eigen_tc2b;
+
+        Matrix3d Rwb = Sophus_new::SO3::exp(PHIwb).matrix();
+        Vector3d p1 = Rcb * Rwb.transpose() * (Pw - Pwb) - Rcb * Pbc;
 
         //TODO 设置雅克比矩阵
 
-        Eigen::Vector3d p1 = q * p + t;
+//        Eigen::Vector3d p1 = q * p + t;
 
-        const double predicted_x =  p1[0] / p1[2];
-        const double predicted_y =  p1[1] / p1[2];
+        const double predicted_x = p1[0] / p1[2];
+        const double predicted_y = p1[1] / p1[2];
+
+
+        //计算的是归一化平面中的误差？
         residuals[0] = predicted_x - observed_x_;
         residuals[1] = predicted_y - observed_y_;
+
+//        cout<<"residuals[0]:"<<residuals[0]<<endl;
+//        cout<<"residuals[1]:"<<residuals[1]<<endl;
 
         residuals[0] *= weight_;
         residuals[1] *= weight_;
@@ -136,16 +156,26 @@ public:
 
         if(jacobian0 != nullptr)
         {
-            Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor> > Jse3(jacobian0);
+//            Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor> > Jse3(jacobian0);
+//            Eigen::Map<Eigen::Matrix<double, 2, 9, Eigen::RowMajor> > Jse3(jacobian0);
+//            Jse3.setZero();
+//            //! In the order of Sophus::Tangent
+//            Jse3.block<2,3>(0,0) = jacobian;
+//            Jse3.block<2,3>(0,3) = jacobian*Sophus::SO3d::hat(-p1);
+
+            Eigen::Map<Eigen::Matrix<double, 2, 9, Eigen::RowMajor> > Jse3(jacobian0);
             Jse3.setZero();
             //! In the order of Sophus::Tangent
-            Jse3.block<2,3>(0,0) = jacobian;
-            Jse3.block<2,3>(0,3) = jacobian*Sophus::SO3d::hat(-p1);
+            Jse3.block<2,3>(0,0) = jacobian * (-Rcb*Rwb.transpose());
+            Jse3.block<2,3>(0,6) = jacobian * (Sophus::SO3d::hat(Rcb*Rwb.transpose()*(Pw-Pwb)) * Rcb);
+//            cout<<"Jse3-------------------------------"<<Jse3<<endl;
         }
         if(jacobian1 != nullptr)
         {
             Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > Jpoint(jacobian1);
-            Jpoint = jacobian * q.toRotationMatrix();
+//            Jpoint = jacobian * q.toRotationMatrix();
+            Jpoint = jacobian * Rcb*Rwb.transpose();
+//            cout<<"Jpoint-------------------------------"<<Jpoint<<endl;
         }
         return true;
     }

@@ -53,9 +53,10 @@ void LoadParameters(ros::NodeHandle &n)
     cv::cv2eigen(Rc2b,eigen_Rc2b);
     cv::cv2eigen(tc2b,eigen_tc2b);
 
+    Tc2b = SE3d(eigen_Rc2b,eigen_tc2b);
 
-    Tc2b.translation() = eigen_tc2b;
-    Tc2b.rotationMatrix() = eigen_Rc2b;
+//    Tc2b.translation() = eigen_tc2b;
+//    Tc2b.rotationMatrix() = eigen_Rc2b;
 //
 //    camera_fx=filename["camera.fx"];
 //    camera_fy=filename["camera.fy"];

@@ -405,6 +405,7 @@ System::Status System::initialize()
 
         LOG(WARNING) << "[System] End of two-view BA";
 
+
         current_frame_->setPose(kf1->pose());
         current_frame_->setRefKeyFrame(kf1);
         reference_keyframe_ = kf1;
@@ -506,12 +507,12 @@ System::Status System::tracking()
     current_frame_->setRefKeyFrame(reference_keyframe_);
 
     //! track seeds
-//    cout<<"test 1"<<endl;
+
     //todo 没有种子点怎么办?
     depth_filter_->trackFrame(last_frame_, current_frame_);//追踪上一帧的种子点，添加当前帧的种子点
 
     // TODO 先验信息怎么设置？
-//    cout<<"test 1"<<endl;
+
     current_frame_->setPose(last_frame_->pose());
     ///粗略估计当前帧的位姿，而不是像ORB那样很粗略
     //! alignment by SE3
@@ -554,12 +555,12 @@ System::Status System::tracking()
     sysTrace->stopTimer("motion_ba");
 
     sysTrace->startTimer("per_depth_filter");
-    cout<<"test 4"<<endl;
+
     if(createNewKeyFrame())
     {
-        cout<<"test 5"<<endl;
+
         depth_filter_->insertFrame(current_frame_, reference_keyframe_);
-        cout<<"test 6"<<endl;
+
         mapper_->insertKeyFrame(reference_keyframe_);
     }
     else
@@ -569,7 +570,6 @@ System::Status System::tracking()
     sysTrace->stopTimer("per_depth_filter");
 
     sysTrace->startTimer("light_affine");
-    cout<<"test 7"<<endl;
     calcLightAffine();
     sysTrace->stopTimer("light_affine");
 
@@ -580,15 +580,7 @@ System::Status System::tracking()
 
     if(!vio_init&&current_frame_->id_>secondframe_id)initilization_frame_buffer_.emplace_back(current_frame_);
 
-    //! jh 失败的
-    /*
-    //! jh add enough frame to initilization
-    if(!vio_init&&initilization_frame_buffer_.size()<10)
-    {
-        initilization_frame_buffer_.emplace_back(current_frame_);
-    }
-     */
-    cout<<"test 8"<<endl;
+
     return STATUS_TRACKING_GOOD;
 }
 

@@ -95,11 +95,24 @@ void Frame::setPose(const SE3d& pose)
 {
     std::lock_guard<std::mutex> lock(mutex_pose_);
     Twc_ = pose;
+
+    cout<<"shneme qingkuang ???"<<endl<<Twc_.translation()<<endl;
     Tcw_ = Twc_.inverse();
     Dw_ = Tcw_.rotationMatrix().determinant() * Tcw_.rotationMatrix().col(2);
 
     Tbw_ = Tc2b * Tcw_;
     Twb_ = Tbw_.inverse();
+
+    PVR[0] = (Twb_.translation()).x();
+    PVR[1] = (Twb_.translation()).y();
+    PVR[2] = (Twb_.translation()).z();
+    PVR[3] = v.x();
+    PVR[4] = v.y();
+    PVR[5] = v.z();
+    Vector3d phii = static_cast<Sophus_new::SO3>(Twb_.rotationMatrix()).log();
+    PVR[6] = phii.x();
+    PVR[7] = phii.y();
+    PVR[8] = phii.z();
 }
 
 void Frame::setPose(const Matrix3d& R, const Vector3d& t)
@@ -111,6 +124,17 @@ void Frame::setPose(const Matrix3d& R, const Vector3d& t)
 
     Tbw_ = Tc2b * Tcw_;
     Twb_ = Tbw_.inverse();
+
+    PVR[0] = (Twb_.translation()).x();
+    PVR[1] = (Twb_.translation()).y();
+    PVR[2] = (Twb_.translation()).z();
+    PVR[3] = v.x();
+    PVR[4] = v.y();
+    PVR[5] = v.z();
+    Vector3d phii = static_cast<Sophus_new::SO3>(Twb_.rotationMatrix()).log();
+    PVR[6] = phii.x();
+    PVR[7] = phii.y();
+    PVR[8] = phii.z();
 }
 
 void Frame::setTcw(const SE3d &Tcw)
@@ -123,6 +147,17 @@ void Frame::setTcw(const SE3d &Tcw)
     Tbw_ = Tc2b * Tcw_;
     Twb_ = Tbw_.inverse();
 
+    PVR[0] = (Twb_.translation()).x();
+    PVR[1] = (Twb_.translation()).y();
+    PVR[2] = (Twb_.translation()).z();
+    PVR[3] = v.x();
+    PVR[4] = v.y();
+    PVR[5] = v.z();
+    Vector3d phii = static_cast<Sophus_new::SO3>(Twb_.rotationMatrix()).log();
+    PVR[6] = phii.x();
+    PVR[7] = phii.y();
+    PVR[8] = phii.z();
+
 }
 
     void Frame::setTwb(const SE3d &Twb)
@@ -134,6 +169,18 @@ void Frame::setTcw(const SE3d &Tcw)
         Twc_ = Tcw_.inverse();
         Dw_ = Tcw_.rotationMatrix().determinant() * Tcw_.rotationMatrix().col(2);
 
+        optimal_Twb_ = Twb;
+
+        PVR[0] = (Twb_.translation()).x();
+        PVR[1] = (Twb_.translation()).y();
+        PVR[2] = (Twb_.translation()).z();
+        PVR[3] = v.x();
+        PVR[4] = v.y();
+        PVR[5] = v.z();
+        Vector3d phii = static_cast<Sophus_new::SO3>(Twb_.rotationMatrix()).log();
+        PVR[6] = phii.x();
+        PVR[7] = phii.y();
+        PVR[8] = phii.z();
     }
 
 bool Frame::isVisiable(const Vector3d &xyz_w, const int border)
