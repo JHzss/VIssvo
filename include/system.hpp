@@ -62,7 +62,7 @@ private:
 
     Status relocalize();
 
-    bool createNewKeyFrame();
+    bool createNewKeyFrame(int matches);
 
     void finishFrame();
 

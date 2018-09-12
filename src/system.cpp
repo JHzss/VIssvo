@@ -18,7 +18,7 @@ System::System(std::string config_file) :
     stage_(STAGE_INITALIZE), status_(STATUS_INITAL_RESET),
     last_frame_(nullptr), current_frame_(nullptr), reference_keyframe_(nullptr),firstframe_id(-1),vio_init(false),RT_success(false),correctScale(false)
 {
-    systemScale=-1.0;
+    systemScale = -1.0;
     LOG_ASSERT(!config_file.empty()) << "Empty Config file input!!!";
     Config::FileName = config_file;
 
@@ -256,13 +256,8 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
 
             vio_init = vio_process();
 
-//            depth_filter_->stopMainThread();
-//            mapper_->stopMainThread();
-//            waitKey(0);
-
             if(!vio_init)
             {
-
                 initilization_frame_buffer_.pop_front();
             }
             else
@@ -271,7 +266,6 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
                 mapper_->map_->applyScaleCorrect(systemScale);
                 last_frame_ =initilization_frame_buffer_.back();
                 cout<<"initilization_frame_buffer_.back() frame id:"<<current_frame_->id_<<endl;
-
             }
 
         }
@@ -310,7 +304,6 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
 
     all_frame_buffer_.emplace_back(current_frame_);
 
-
     double t1 = (double)cv::getTickCount();
     LOG(WARNING) << "[System] Frame " << current_frame_->id_ << " create time: " << (t1-t0)/cv::getTickFrequency();
     sysTrace->log("frame_id", current_frame_->id_);
@@ -323,19 +316,11 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
     }
     else if(STAGE_INITALIZE == stage_)
     {
-
-        if(vio_init)
-        {
-            cout<<"STAGE_INITALIZE == stage_"<<endl;
-            depth_filter_->stopMainThread();
-            mapper_->stopMainThread();
-            waitKey(0);
-        }
-
         status_ = initialize();
     }
     else if(STAGE_RELOCALIZING == stage_)
     {
+        /*
         if(vio_init)
         {
             cout<<"STAGE_RELOCALIZING == stage_"<<endl;
@@ -343,7 +328,7 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
             mapper_->stopMainThread();
             waitKey(0);
         }
-
+         */
         status_ = relocalize();
     }
     sysTrace->stopTimer("processing");
@@ -483,6 +468,9 @@ System::Status System::tracking()
 
     current_frame_->setRefKeyFrame(reference_keyframe_);
 
+
+    cout<<"reference_keyframe_ id :"<<reference_keyframe_->frame_id_<<endl;
+
     //! track seeds
 
     //todo 没有种子点怎么办?
@@ -536,7 +524,7 @@ System::Status System::tracking()
 
     sysTrace->startTimer("per_depth_filter");
 
-    if(createNewKeyFrame())
+    if(createNewKeyFrame(matches) )
     {
 
         depth_filter_->insertFrame(current_frame_, reference_keyframe_);
@@ -647,7 +635,7 @@ void System::calcLightAffine()
 //    std::cout << "a: " << a << " b: " << b << std::endl;
 }
 
-bool System::createNewKeyFrame()
+bool System::createNewKeyFrame(int matches)
 {
     std::map<KeyFrame::Ptr, int> overlap_kfs = current_frame_->getOverLapKeyFrames();
 
@@ -743,7 +731,7 @@ bool System::createNewKeyFrame()
 //    bool c4 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.9;
 
     //! create new keyFrame
-    if(c1 && (c2 || c3 ) || (cjh && !vio_init))
+    if(c1 && (c2 || c3 ) || (cjh && !vio_init) || matches < 80)
     {
         //! create new keyframe
         KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
@@ -933,15 +921,15 @@ bool System::vio_process()
         //! jh change the state
 
         systemScale=(x.tail<1>())(0)/100;
-        double scale =systemScale;
+//        systemScale = 1;
+
         vector<uint64_t > ids;
         vector<uint64_t > ids_mp;
         for(auto &frame:initilization_frame_buffer_)
         {
             frame->optimal_Tcw_=frame->Tcw();
-            frame->optimal_Tcw_.translation()*=scale;
+            frame->optimal_Tcw_.translation() *= systemScale;
             frame->setTcw(frame->optimal_Tcw_);
-
 
             /*
 //            MapPoints mpts;

@@ -8,6 +8,7 @@ namespace ssvo{
 
 void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2, bool report, bool verbose)
 {
+    cout<<"-------------------------------------twoViewBundleAdjustment--------------------------------------"<<endl;
     kf1->optimal_Tcw_ = kf1->Tcw();
     kf2->optimal_Tcw_ = kf2->Tcw();
 
@@ -101,6 +102,8 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
 
 void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, int min_shared_fts, bool report, bool verbose)
 {
+
+    cout<<"-------------------------------------localBundleAdjustment--------------------------------------"<<endl;
     double t0 = (double)cv::getTickCount();
     size = size > 0 ? size-1 : 0;
     std::set<KeyFrame::Ptr> actived_keyframes = keyframe->getConnectedKeyFrames(size, min_shared_fts);
@@ -410,8 +413,9 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
 
 void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Frame::Ptr &frame, bool use_seeds, bool vio, bool reject, bool report, bool verbose)
 {
-    static const size_t OPTIMAL_MPTS = 150;
 
+    cout<<"-------------------------------------motionOnlyBundleAdjustment--------------------------------------"<<endl;
+    static const size_t OPTIMAL_MPTS = 150;
 
 //    frame->optimal_Tcw_ = frame->Tcw();
 
@@ -485,8 +489,8 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 
 //        ceres::LocalParameterization* PVRpose = new PosePVR();
     //! by jh
-    if(vio)
-    {
+//    if(vio)
+//    {
 //        double bias_i[3];
 //        bias_i[0] = last_frame->ba.x();
 //        bias_i[1] = last_frame->ba.y();
@@ -499,7 +503,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 //        ceres_slover::IMUError* imu_factor = new ceres_slover::IMUError(last_frame,frame);
 //        problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,bias_i,frame->PVR);
 //        problem.SetParameterBlockConstant(last_frame->PVR);
-    }
+//    }
 
 
     ceres::Solver::Options options;

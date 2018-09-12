@@ -54,7 +54,11 @@ void process(System &vo_)
             imustxt<<endl;
             vo_.process(measure);
         }
+
+        vo_.saveTrajectoryTUM("/home/jh/trajectory_vio.txt");
     }
+
+
 
 }
 
@@ -80,6 +84,7 @@ int main(int argc, char *argv[])
     ros::Subscriber sub_imu = n.subscribe(vo.IMU_TOPIC_s,1000,imu_callback);
 
     std::thread main_thread(process,std::ref(vo));//用std::ref来包装引用类型的参数
+
 
 
     ros::spin();

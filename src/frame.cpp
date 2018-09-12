@@ -95,8 +95,6 @@ void Frame::setPose(const SE3d& pose)
 {
     std::lock_guard<std::mutex> lock(mutex_pose_);
     Twc_ = pose;
-
-    cout<<"shneme qingkuang ???"<<endl<<Twc_.translation()<<endl;
     Tcw_ = Twc_.inverse();
     Dw_ = Tcw_.rotationMatrix().determinant() * Tcw_.rotationMatrix().col(2);
 
