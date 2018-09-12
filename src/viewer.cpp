@@ -77,8 +77,8 @@ void Viewer::run()
     pangolin::Var<bool> menu_show_connections("menu.Connections", true, true);
     pangolin::Var<bool> menu_show_current_connections("menu.Connections_cur", true, true);
 
-    const int trajectory_duration_max = 10000;
-    pangolin::Var<int> settings_trajectory_duration("menu.Traj Duration",2000, 1, trajectory_duration_max,false);
+    const int trajectory_duration_max = 30000;
+    pangolin::Var<int> settings_trajectory_duration("menu.Traj Duration",5000, 1, trajectory_duration_max,false);
 
 
     bool following_camera = true;

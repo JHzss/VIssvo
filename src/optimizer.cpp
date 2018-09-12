@@ -8,8 +8,8 @@ namespace ssvo{
 
 void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2, bool report, bool verbose)
 {
-//    kf1->optimal_Tcw_ = kf1->Tcw();
-//    kf2->optimal_Tcw_ = kf2->Tcw();
+    kf1->optimal_Tcw_ = kf1->Tcw();
+    kf2->optimal_Tcw_ = kf2->Tcw();
 
     kf1->optimal_Twb_ = kf1->Twb();
     kf2->optimal_Twb_ = kf2->Twb();
@@ -29,9 +29,9 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
     problem.AddParameterBlock(kf2->PVR, 9, pvrpose);
     problem.SetParameterBlockConstant(kf1->PVR);
 
-    cout<<"kf1 pose------------------------------------------------------------BEFORE:"<<endl<<kf1->optimal_Twb_.rotationMatrix()<<endl<<kf1->optimal_Twb_.translation()<<endl;
+    cout<<"kf1 pose------------------------------------------------------------BEFORE:"<<endl<<kf1->optimal_Tcw_.rotationMatrix()<<endl<<kf1->optimal_Tcw_.translation()<<endl;
 
-    cout<<"kf2 pose------------------------------------------------------------BEFORE:"<<endl<<kf2->optimal_Twb_.rotationMatrix()<<endl<<kf2->optimal_Twb_.translation()<<endl;
+    cout<<"kf2 pose------------------------------------------------------------BEFORE:"<<endl<<kf2->optimal_Tcw_.rotationMatrix()<<endl<<kf2->optimal_Tcw_.translation()<<endl;
 
     std::vector<Feature::Ptr> fts1;
     kf1->getFeatures(fts1);
@@ -81,15 +81,14 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
 
     SE3d tmp(ttttt,t);
 
-//    kf2->optimal_Twb_ = tmp;
-
-//    kf2->optimal_Twb_.translation() = t;
-//    kf2->optimal_Twb_.rotationMatrix() = ttttt;
 
     kf2->setTwb(tmp);
 
-    cout<<"kf1 pose------------------------------------------------------------after:"<<endl<<kf1->optimal_Twb_.rotationMatrix()<<endl<<kf1->optimal_Twb_.translation()<<endl;
-    cout<<"kf2 pose------------------------------------------------------------after:"<<endl<<kf2->optimal_Twb_.rotationMatrix()<<endl<<kf1->optimal_Twb_.translation()<<endl;
+    kf1->optimal_Tcw_ = kf1->Tcw();
+    kf2->optimal_Tcw_ = kf2->Tcw();
+
+    cout<<"kf1 pose------------------------------------------------------------after:"<<endl<<kf1->optimal_Tcw_.rotationMatrix()<<endl<<kf1->optimal_Tcw_.translation()<<endl;
+    cout<<"kf2 pose------------------------------------------------------------after:"<<endl<<kf2->optimal_Tcw_.rotationMatrix()<<endl<<kf2->optimal_Tcw_.translation()<<endl;
 //    kf2->setTcw(kf2->optimal_Tcw_);
 
     std::for_each(mpts.begin(), mpts.end(), [](MapPoint::Ptr mpt){mpt->setPose(mpt->optimal_pose_);});
@@ -97,7 +96,7 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
     //! Report
     reportInfo(problem, summary, report, verbose);
 
-    waitKey(0);
+//    waitKey(0);
 }
 
 void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, int min_shared_fts, bool report, bool verbose)
@@ -153,7 +152,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     ceres::LocalParameterization* pvrpose = new PosePVR();
 
 
-        for(const KeyFrame::Ptr &kf : fixed_keyframe)
+    for(const KeyFrame::Ptr &kf : fixed_keyframe)
     {
         problem.AddParameterBlock(kf->PVR, 9, pvrpose);
         problem.SetParameterBlockConstant(kf->PVR);
@@ -204,9 +203,13 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
         Vector3d t = Vector3d(kf->PVR[0],kf->PVR[1],kf->PVR[2]);
         Vector3d w = Vector3d(kf->PVR[6],kf->PVR[7],kf->PVR[8]);
 
-        kf->optimal_Twb_.translation() = t;
-        kf->optimal_Twb_.rotationMatrix() = Sophus_new::SO3::exp(w).matrix();
-        kf->setTwb(kf->optimal_Twb_);
+
+        Matrix3d ttttt = Sophus::SO3d::exp(w).matrix();
+
+        SE3d tmp(ttttt,t);
+
+        kf->setTwb(tmp);
+
     }
 
     //! update mpts & remove mappoint with large error
@@ -484,13 +487,18 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
     //! by jh
     if(vio)
     {
-
-//        problem.AddParameterBlock(PVRi,9,PVRpose);
-//        problem.AddParameterBlock(PVRj,9,PVRpose);
+//        double bias_i[3];
+//        bias_i[0] = last_frame->ba.x();
+//        bias_i[1] = last_frame->ba.y();
+//        bias_i[2] = last_frame->ba.z();
+//
+//        ceres::LocalParameterization* pvrpose1 = new PosePVR();
+//        problem.AddParameterBlock(last_frame->PVR,9,pvrpose1);
+//        problem.AddParameterBlock(frame->PVR,9,pvrpose1);
 //
 //        ceres_slover::IMUError* imu_factor = new ceres_slover::IMUError(last_frame,frame);
-//        problem.AddResidualBlock(imu_factor,NULL,PVRi,bias_i,PVRj);
-//        problem.SetParameterBlockConstant(PVRi);
+//        problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,bias_i,frame->PVR);
+//        problem.SetParameterBlockConstant(last_frame->PVR);
     }
 
 
@@ -531,9 +539,12 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
         Vector3d t = Vector3d(frame->PVR[0],frame->PVR[1],frame->PVR[2]);
         Vector3d w = Vector3d(frame->PVR[6],frame->PVR[7],frame->PVR[8]);
 
-        frame->optimal_Twb_.translation() = t;
-        frame->optimal_Twb_.rotationMatrix() = Sophus_new::SO3::exp(w).matrix();
-        frame->setTwb(frame->optimal_Twb_);
+        Matrix3d ttttt = Sophus::SO3d::exp(w).matrix();
+
+        SE3d tmp(ttttt,t);
+
+
+        frame->setTwb(tmp);
 
 //    frame->setTcw(frame->optimal_Tcw_);
 

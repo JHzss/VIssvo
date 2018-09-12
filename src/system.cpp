@@ -277,29 +277,6 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
         }
     }
 
-    /*
-    if(systemScale > 0)
-    {
-        status_ = reinitialize();
-        systemScale = -1;
-    }
-
-    if(correctScale)
-    {
-        last_frame_ = initilization_frame_buffer_.front();
-        //todo 重新跟踪 initilization_frame_buffer_ 中的
-        for(auto frame:initilization_frame_buffer_)
-        {
-            cout<<"begin reinit6"<<endl;
-            current_frame_=frame;
-            cout<<"begin reinit7"<<endl;
-            status_=tracking();
-            cout<<"begin reinit8"<<endl;
-            finishFrame();
-        }
-        correctScale=false;
-    }
-     */
 
     sensor_msgs::ImageConstPtr ros_image;
     ros_image=measure.second;
@@ -531,6 +508,9 @@ System::Status System::tracking()
     //todo  here!
     int matches = feature_tracker_->reprojectLoaclMap(current_frame_);
 
+
+    cout<<"---------------------------------------- matches when tracking -------------------------------------"<<endl;
+
     cout<<last_frame_->featureNumber()<<endl;
     cout<<current_frame_->featureNumber()<<endl;
 
@@ -580,6 +560,7 @@ System::Status System::tracking()
 
     if(!vio_init&&current_frame_->id_>secondframe_id)initilization_frame_buffer_.emplace_back(current_frame_);
 
+//    waitKey(0);
 
     return STATUS_TRACKING_GOOD;
 }

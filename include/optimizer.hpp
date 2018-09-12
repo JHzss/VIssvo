@@ -166,15 +166,15 @@ public:
             Eigen::Map<Eigen::Matrix<double, 2, 9, Eigen::RowMajor> > Jse3(jacobian0);
             Jse3.setZero();
             //! In the order of Sophus::Tangent
-            Jse3.block<2,3>(0,0) = jacobian * (-Rcb*Rwb.transpose());
-            Jse3.block<2,3>(0,6) = jacobian * (Sophus::SO3d::hat(Rcb*Rwb.transpose()*(Pw-Pwb)) * Rcb);
+            Jse3.block<2,3>(0,0) =  jacobian * (-Rcb*Rwb.transpose());
+            Jse3.block<2,3>(0,6) =  jacobian * (Sophus::SO3d::hat(Rcb*Rwb.transpose()*(Pw-Pwb)) * Rcb);
 //            cout<<"Jse3-------------------------------"<<Jse3<<endl;
         }
         if(jacobian1 != nullptr)
         {
             Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > Jpoint(jacobian1);
 //            Jpoint = jacobian * q.toRotationMatrix();
-            Jpoint = jacobian * Rcb*Rwb.transpose();
+            Jpoint =  jacobian * Rcb*Rwb.transpose();
 //            cout<<"Jpoint-------------------------------"<<Jpoint<<endl;
         }
         return true;
