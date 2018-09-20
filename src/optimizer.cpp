@@ -426,6 +426,13 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
       problem.AddParameterBlock(frame->PVR, 9, pvrpose);
 
     //!by jh
+        double bias_i[6];
+        bias_i[0] = last_frame->preintegration->bg.x();
+        bias_i[1] = last_frame->preintegration->bg.y();
+        bias_i[2] = last_frame->preintegration->bg.z();
+        bias_i[3] = last_frame->preintegration->ba.x();
+        bias_i[4] = last_frame->preintegration->ba.y();
+        bias_i[5] = last_frame->preintegration->ba.z();
 //    problem.AddParameterBlock(last_frame_ba[0],3);
 //    problem.AddParameterBlock(last_frame_bg[0],3);
 //    problem.AddParameterBlock(frame_ba[0],3);
@@ -437,7 +444,8 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
     std::vector<Feature::Ptr> fts;
     frame->getFeatures(fts);
     const size_t N = fts.size();
-    std::vector<ceres::ResidualBlockId> res_ids(N);
+
+    std::vector<ceres::ResidualBlockId> res_ids(N+1);
     for(size_t i = 0; i < N; ++i)
     {
         Feature::Ptr ft = fts[i];
@@ -452,7 +460,9 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
         problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
     }
 
-    if(N < OPTIMAL_MPTS)
+//    if(N < OPTIMAL_MPTS)
+        //! false 不用种子点，用了效果不好
+    if(use_seeds)
     {
         std::vector<Feature::Ptr> ft_seeds;
         frame->getSeeds(ft_seeds);
@@ -489,21 +499,15 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 
 //        ceres::LocalParameterization* PVRpose = new PosePVR();
     //! by jh
-//    if(vio)
-//    {
-//        double bias_i[3];
-//        bias_i[0] = last_frame->ba.x();
-//        bias_i[1] = last_frame->ba.y();
-//        bias_i[2] = last_frame->ba.z();
-//
-//        ceres::LocalParameterization* pvrpose1 = new PosePVR();
-//        problem.AddParameterBlock(last_frame->PVR,9,pvrpose1);
-//        problem.AddParameterBlock(frame->PVR,9,pvrpose1);
-//
-//        ceres_slover::IMUError* imu_factor = new ceres_slover::IMUError(last_frame,frame);
-//        problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,bias_i,frame->PVR);
-//        problem.SetParameterBlockConstant(last_frame->PVR);
-//    }
+    if(vio)
+    {
+        problem.AddParameterBlock(last_frame->PVR,9,pvrpose);
+        problem.SetParameterBlockConstant(last_frame->PVR);
+
+        ceres_slover::IMUError* imu_factor = new ceres_slover::IMUError(last_frame,frame);
+        res_ids[N]=problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,bias_i,frame->PVR);
+
+    }
 
 
     ceres::Solver::Options options;
@@ -517,10 +521,13 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 
     if(reject)
     {
+        int M = N;
+//        if(vio)
+//            M = M+1;
         int remove_count = 0;
 
         static const double TH_REPJ = 3.81 * Config::imagePixelUnSigma2();
-        for(size_t i = 0; i < N; ++i)
+        for(size_t i = 0; i < M; ++i)
         {
             Feature::Ptr ft = fts[i];
             if(reprojectionError(problem, res_ids[i]).squaredNorm() > TH_REPJ * (1 << ft->level_))
@@ -549,6 +556,12 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 
 
         frame->setTwb(tmp);
+//        last_frame->bg = Eigen::Vector3d(bias_i[0],bias_i[1],bias_i[2]);
+        last_frame->preintegration->bg = Eigen::Vector3d(bias_i[0],bias_i[1],bias_i[2]);
+//        last_frame->ba = Eigen::Vector3d(bias_i[3],bias_i[4],bias_i[5]);
+        last_frame->preintegration->ba = Eigen::Vector3d(bias_i[3],bias_i[4],bias_i[5]);
+
+        frame->v = Vector3d(frame->PVR[3],frame->PVR[5],frame->PVR[5]);
 
 //    frame->setTcw(frame->optimal_Tcw_);
 

@@ -140,6 +140,8 @@ public:
         residuals[0] *= weight_;
         residuals[1] *= weight_;
 
+//        cout<<"residul  pose----------------->"<<endl<<residuals[0]<<" "<<residuals[1]<<endl;
+
         if(!jacobians) return true;
         double* jacobian0 = jacobians[0];
         double* jacobian1 = jacobians[1];
@@ -435,59 +437,74 @@ private:
         {
 
             //! 参数增量
-            Eigen::Map<const Eigen::Vector3d> delta_pi(parameters[0]);
-            Eigen::Map<const Eigen::Vector3d> delta_vi(parameters[0]+3);
-            Eigen::Map<const Eigen::Vector3d> delta_phii(parameters[0]+6);
+/*
+//            Eigen::Map<const Eigen::Vector3d> delta_pi(parameters[0]);
+//            Eigen::Map<const Eigen::Vector3d> delta_vi(parameters[0]+3);
+//            Eigen::Map<const Eigen::Vector3d> delta_phii(parameters[0]+6);
+//
+//            Eigen::Map<const Eigen::Vector3d> delta_bgi(parameters[1]);
+//            Eigen::Map<const Eigen::Vector3d> delta_bai(parameters[1]+3);
+//
+//            Eigen::Map<const Eigen::Vector3d> delta_pj(parameters[2]);
+//            Eigen::Map<const Eigen::Vector3d> delta_vj(parameters[2]+3);
+//            Eigen::Map<const Eigen::Vector3d> delta_phij(parameters[2]+6);
+             */
+            Eigen::Map<const Eigen::Vector3d> Pi(parameters[0]);
+            Eigen::Map<const Eigen::Vector3d> Vi(parameters[0]+3);
+            Eigen::Map<const Eigen::Vector3d> PHIi(parameters[0]+6);
 
-            Eigen::Map<const Eigen::Vector3d> delta_bgi(parameters[1]);
-            Eigen::Map<const Eigen::Vector3d> delta_bai(parameters[1]+3);
+            Eigen::Map<const Eigen::Vector3d> Bgi(parameters[1]);
+            Eigen::Map<const Eigen::Vector3d> Bai(parameters[1]+3);
 
-            Eigen::Map<const Eigen::Vector3d> delta_pj(parameters[2]);
-            Eigen::Map<const Eigen::Vector3d> delta_vj(parameters[2]+3);
-            Eigen::Map<const Eigen::Vector3d> delta_phij(parameters[2]+6);
+            Eigen::Map<const Eigen::Vector3d> Pj(parameters[2]);
+            Eigen::Map<const Eigen::Vector3d> Vj(parameters[2]+3);
+            Eigen::Map<const Eigen::Vector3d> PHIj(parameters[2]+6);
 
+            Eigen::Vector3d Baj = cur_frame_->preintegration->ba;
+            Eigen::Vector3d Bgj = cur_frame_->preintegration->bg;
 
-            //! 根据上一次的优化结果更新帧的PVR
+            Eigen::Matrix3d Ri = Sophus::SO3d::exp(PHIi).matrix();
+            Eigen::Matrix3d Rj = Sophus::SO3d::exp(PHIj).matrix();
 
-            Matrix3d dR = Sophus::SO3d::exp(delta_phii).matrix();
-
-            Sophus::SE3d pose_;
-            pose_ = last_frame_->Twb();
-            pose_.rotationMatrix() = pose_.rotationMatrix() * dR;
-            pose_.translation() += delta_pi;
-            last_frame_->setTwb(pose_);
-            last_frame_->v += delta_vi;
-
-            dR = Sophus::SO3d::exp(delta_phij).matrix();
-            pose_ = cur_frame_->Twb();
-            pose_.rotationMatrix() = pose_.rotationMatrix() * dR;
-            pose_.translation() += delta_pj;
-            cur_frame_->setTwb(pose_);
-            cur_frame_->v += delta_vj;
-            cur_frame_->optimal_Tcw_ = cur_frame_->Tcw();
-
-            last_frame_->ba += delta_bai;
-            last_frame_->bg += delta_bgi;
-            last_frame_->preintegration->ba += delta_bai;
-            last_frame_->preintegration->bg += delta_bgi;
+/*
+//            Matrix3d dR = Sophus::SO3d::exp(delta_phii).matrix();
+//
+//            Sophus::SE3d pose_;
+//            pose_ = last_frame_->Twb();
+//            pose_.rotationMatrix() = pose_.rotationMatrix() * dR;
+//            pose_.translation() += delta_pi;
+//            last_frame_->setTwb(pose_);
+//            last_frame_->v += delta_vi;
+//
+//            dR = Sophus::SO3d::exp(delta_phij).matrix();
+//            pose_ = cur_frame_->Twb();
+//            pose_.rotationMatrix() = pose_.rotationMatrix() * dR;
+//            pose_.translation() += delta_pj;
+//            cur_frame_->setTwb(pose_);
+//            cur_frame_->v += delta_vj;
+//            cur_frame_->optimal_Tcw_ = cur_frame_->Tcw();
+//
+//            last_frame_->ba += delta_bai;
+//            last_frame_->bg += delta_bgi;
+//            last_frame_->preintegration->ba += delta_bai;
+//            last_frame_->preintegration->bg += delta_bgi;
 
 
             //! 得到两帧的 PVR bias 用于求误差函数
-            SE3d T_lastFrame = last_frame_->Twb();
-            SE3d T_curFrame = cur_frame_->Twb();
+//            SE3d T_lastFrame = last_frame_->Twb();
+//            SE3d T_curFrame = cur_frame_->Twb();
 
-            Eigen::Vector3d Pi = T_lastFrame.translation();
-            Eigen::Vector3d Vi = last_frame_->v;
-            Eigen::Matrix3d Ri = T_lastFrame.rotationMatrix();
-            Eigen::Vector3d Bai = last_frame_->ba;
-            Eigen::Vector3d Bgi = last_frame_->bg;
+//            Eigen::Vector3d Pi = T_lastFrame.translation();
+//            Eigen::Vector3d Vi = last_frame_->v;
+//            Eigen::Matrix3d Ri = Sophus::SO3d::exp(PHIi).matrix();
+//            Eigen::Vector3d Bai = last_frame_->ba;
+//            Eigen::Vector3d Bgi = last_frame_->bg;
+//
+//
+//            Eigen::Vector3d Pj = T_curFrame.translation();
+//            Eigen::Vector3d Vj = cur_frame_->v;
+//            Eigen::Matrix3d Rj = Sophus::SO3d::exp(PHIj).matrix();
 
-
-            Eigen::Vector3d Pj = T_curFrame.translation();
-            Eigen::Vector3d Vj = cur_frame_->v;
-            Eigen::Matrix3d Rj = T_curFrame.rotationMatrix();
-            Eigen::Vector3d Baj = cur_frame_->ba;
-            Eigen::Vector3d Bgj = cur_frame_->bg;
 
 
 //            double dt = preintegration_->sum_t;
@@ -495,8 +512,8 @@ private:
 //            Vector3d delta_vij = preintegration_->dv;
 //            Matrix3d delta_rij = preintegration_->dR;
 //            Vector3d gravity = G ;
-
-            /*
+*/
+/*
             Eigen::Map<const Eigen::Quaterniond> Qwb_i(parameters[0]);
             Eigen::Map<const Eigen::Vector3d> Pwb_i(parameters[0] + 4);
             Eigen::Map<const Eigen::Quaterniond> Qwb_j(parameters[2]);
@@ -516,8 +533,10 @@ private:
             Eigen::Map<Eigen::Matrix<double, 9, 1>> residual(residuals);
 
 
-            residual = preintegration_->evaluate(Pi, Ri, Vi, Bai, Bgi, Pj, Rj, Vj, Baj, Bgj);
+            residual = preintegration_->evaluate(Pi, Ri, Vi, Bai, Bgi,
+                                                 Pj, Rj, Vj, Baj, Bgj);
 
+            cout<<"original residual----------------->"<<endl<<residual<<endl;
 
 
             double sum_t = preintegration_->sum_t;
@@ -532,13 +551,17 @@ private:
 
             Eigen::Vector3d rPhiij = residual.segment<3>(6);
             Eigen::Matrix3d ExprPhiijTrans = Sophus::SO3d::exp(rPhiij).inverse().matrix();
-            Eigen::Matrix3d JrBiasGCorr = Sophus_new::SO3::JacobianR(dr_dbg * (last_frame_->bg - preintegration_->bg_tmp));// todo 检查一下
+            Eigen::Matrix3d JrBiasGCorr = Sophus_new::SO3::JacobianR(dr_dbg * (last_frame_->preintegration->bg - preintegration_->bg_tmp));// todo 检查一下
             Eigen::Matrix3d JrInv_rPhi = Sophus_new::SO3::JacobianRInv( rPhiij );
 
 //            cout<<"preintegration_->covariance:"<<endl<<preintegration_->covariance<<endl;
 
+            // todo 这里有问题
             Eigen::Matrix<double, 9, 9> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 9, 9>>(preintegration_->covariance.inverse()).matrixL().transpose();
+
+            cout<<"sqrt_info:"<<endl<<sqrt_info<<endl;
             residual = sqrt_info * residual;
+            cout<<"sqrt_info residual:"<<endl<<residual<<endl;
 
             if (jacobians)
             {
@@ -562,6 +585,8 @@ private:
                         //std::cout << sqrt_info << std::endl;
                         ROS_BREAK();
                     }
+
+//                    cout<<"jacobian_pose_i: "<<endl<<jacobian_pose_i<<endl;
                 }
                 if (jacobians[1])
                 {
@@ -578,6 +603,7 @@ private:
 
                     ROS_ASSERT(fabs(jacobian_speedbias_i.maxCoeff()) < 1e8);
                     ROS_ASSERT(fabs(jacobian_speedbias_i.minCoeff()) < 1e8);
+//                    cout<<"jacobian_speedbias_i: "<<endl<<jacobian_speedbias_i<<endl;
                 }
                 if (jacobians[2])
                 {
@@ -592,6 +618,7 @@ private:
 
                     ROS_ASSERT(fabs(jacobian_pose_j.maxCoeff()) < 1e8);
                     ROS_ASSERT(fabs(jacobian_pose_j.minCoeff()) < 1e8);
+//                    cout<<"jacobian_pose_j: "<<endl<<jacobian_pose_j<<endl;
                 }
 
             }

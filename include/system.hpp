@@ -58,7 +58,6 @@ private:
 
     Status initialize();
 
-    Status reinitialize();
 
     Status relocalize();
 
@@ -123,6 +122,25 @@ private:
     std::deque<Frame::Ptr> initilization_frame_buffer_;
     std::vector<Frame::Ptr> all_frame_buffer_;
 
+    public:
+        bool get_vio_init(){ return vio_init;}
+
+        bool correctFileScale()
+        {
+            for(auto &frame_pose:frame_pose_buffer_)
+            {
+                Matrix3d pose = frame_pose.rotationMatrix();
+                Vector3d t = frame_pose.translation();
+                t *= systemScale ;
+
+                frame_pose = Sophus::SE3d(pose,t);
+
+            }
+
+            return true;
+        }
+
+        bool filescale;
 
 };
 

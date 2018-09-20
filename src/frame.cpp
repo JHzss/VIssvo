@@ -14,7 +14,7 @@ float Frame::light_affine_a_ = 1.0f;
 float Frame::light_affine_b_ = 0.0f;
 
 Frame::Frame(const cv::Mat &img, const double timestamp, const AbstractCamera::Ptr &cam, Vector3d ba_, Vector3d bg_, Preintegration::Ptr& preint) :
-    id_(next_id_++), timestamp_(timestamp), cam_(cam), max_level_(Config::imageTopLevel()), ba(ba_), bg(bg_), preintegration(preint)
+    id_(next_id_++), timestamp_(timestamp), cam_(cam), max_level_(Config::imageTopLevel()), preintegration(preint)
 {
     gray_image=img;
     Tcw_ = SE3d(Matrix3d::Identity(), Vector3d::Zero());

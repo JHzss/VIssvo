@@ -55,7 +55,7 @@ Align.patch_size: 4
 
 # Tracking
 Tracking.max_local_kfs: 10
-Tracking.min_quality_fts: 5
+Tracking.min_quality_fts: 50
 Tracking.max_quality_drop_fts: 40
 
 # DepthFilter

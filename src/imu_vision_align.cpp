@@ -45,7 +45,7 @@ Vector3d EstimateGyrBais(deque<Frame::Ptr> &initilization_frame_buffer_)
     for(auto frame:initilization_frame_buffer_)
     {
         ///这里注意一下bg值都得更新，因为当初没弄好，就注意一下吧
-        frame->bg+=delta_bg;
+//        frame->bg+=delta_bg;
         frame->preintegration->bg+=delta_bg;
         frame->preintegration->rerun();
     }
@@ -248,12 +248,12 @@ bool RefineGravity(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x)
 //        cout<<"Pwc_i:"<<endl<<Pwc_i<<endl;
 //        cout<<"Pwc_j:"<<endl<<Pwc_j<<endl;
 
-            temp_A.block(0,0,3,3)=-Matrix3d::Identity()*frame_dt;
-            temp_A.block(0,6,3,2)=-0.5*Rwb_i.transpose()*frame_dt*frame_dt*lxly;
-            temp_A.block(0,8,3,1)=Rwb_i.transpose()*(Pwc_j-Pwc_i)/100.0;
-            temp_A.block(3,0,3,3)=-Matrix3d::Identity();
-            temp_A.block(3,3,3,3)=Rwb_i.transpose()*Rwb_j;
-            temp_A.block(3,6,3,2)=-Rwb_i.transpose()*frame_dt*lxly;
+            temp_A.block(0,0,3,3)= -Matrix3d::Identity()*frame_dt;
+            temp_A.block(0,6,3,2)= -0.5*Rwb_i.transpose()*frame_dt*frame_dt*lxly;
+            temp_A.block(0,8,3,1)= Rwb_i.transpose()*(Pwc_j-Pwc_i)/100.0;
+            temp_A.block(3,0,3,3)= -Matrix3d::Identity();
+            temp_A.block(3,3,3,3)= Rwb_i.transpose()*Rwb_j;
+            temp_A.block(3,6,3,2)= -Rwb_i.transpose()*frame_dt*lxly;
 
             temp_b.block(0,0,3,1)=(*frame_j)->preintegration->dp-eigen_tc2b+Rwb_i.transpose()*Rwb_j*eigen_tc2b+0.5*Rwb_i.transpose()*frame_dt*frame_dt*g0;
             temp_b.block(3,0,3,1)=(*frame_j)->preintegration->dv+Rwb_i.transpose()*frame_dt*g0;

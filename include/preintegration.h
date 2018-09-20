@@ -36,44 +36,26 @@ namespace ssvo {
             Eigen::Vector3d dba = Bai - ba_tmp;//ba_j 的ba_tmp 就是bi的初始值
             Eigen::Vector3d dbg = Bgi - bg_tmp;
 
+            cout<<"dba: "<<endl<<dba<<endl<<"dbg:   "<<endl<<dbg<<endl;
+
             //! exp(Jr*delta bg)
             Matrix3d deltaR_wt_eigen;
             Vector3d w;
-            w=jacobian_V_bg * dbg;
+            w = jacobian_R_bg * dbg;
+
+
 
             deltaR_wt_eigen = Sophus_new::SO3::exp(w).matrix();
+            cout<<"deltaR_wt_eigen: "<<endl<<deltaR_wt_eigen<<endl;
 
-            /*
-            Sophus::SO3d deltaR_;
-
-            double theta_;
-            theta_ = w.norm();
-            double half_theta = 0.5*(theta_);
-
-            double imag_factor;
-            double real_factor = cos(half_theta);
-            if((theta_)<1e-10)
-            {
-                double theta_sq = (theta_)*(theta_);
-                double theta_po4 = theta_sq*theta_sq;
-                imag_factor = 0.5-0.0208333*theta_sq+0.000260417*theta_po4;
-            }
-            else
-            {
-                double sin_half_theta = sin(half_theta);
-                imag_factor = sin_half_theta/(theta_);
-            }
-            deltaR_= Sophus::SO3d(Quaterniond(real_factor, imag_factor*w.x(), imag_factor*w.y(), imag_factor*w.z()));
-            deltaR_wt_eigen=deltaR_.matrix();
-             */
             Eigen::Matrix3d corrected_delta_R = dR * deltaR_wt_eigen;
             Eigen::Vector3d corrected_delta_v = dv + jacobian_V_ba * dba + jacobian_V_bg * dbg;
             Eigen::Vector3d corrected_delta_p = dp + jacobian_P_ba * dba + jacobian_P_bg * dbg;
 
-            residuals.block<3, 1>(0, 0) = Ri.inverse() * (0.5 * G * sum_t * sum_t + Pj - Pi - Vi * sum_t) - corrected_delta_p;
-            residuals.block<3, 1>(3, 0) = Ri.inverse() * (G * sum_t + Vj - Vi) - corrected_delta_v;
+            residuals.block<3, 1>(0, 0) = Ri.inverse() * (-0.5 * G * sum_t * sum_t + Pj - Pi - Vi * sum_t) - corrected_delta_p;
+            residuals.block<3, 1>(3, 0) = Ri.inverse() * ( Vj - Vi - G * sum_t) - corrected_delta_v;
             //todo
-            Sophus_new::SO3 tmp(corrected_delta_R.inverse() * (Ri.inverse() * Rj));
+            Sophus_new::SO3 tmp(corrected_delta_R.inverse() * Ri.inverse() * Rj);
             residuals.block<3, 1>(6, 0) = tmp.log();
             return residuals;
         }

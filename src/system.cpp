@@ -16,7 +16,7 @@ TimeTracing::Ptr sysTrace = nullptr;
 
 System::System(std::string config_file) :
     stage_(STAGE_INITALIZE), status_(STATUS_INITAL_RESET),
-    last_frame_(nullptr), current_frame_(nullptr), reference_keyframe_(nullptr),firstframe_id(-1),vio_init(false),RT_success(false),correctScale(false)
+    last_frame_(nullptr), current_frame_(nullptr), reference_keyframe_(nullptr),firstframe_id(-1),vio_init(false),RT_success(false),correctScale(false),filescale(false)
 {
     systemScale = -1.0;
     LOG_ASSERT(!config_file.empty()) << "Empty Config file input!!!";
@@ -251,9 +251,9 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
         }
         if( ok1&&initilization_frame_buffer_.size()>50)
          */
+        //! 50更利于imu和相机之间的初始化 20 100的效果都不如50，但是应该会根据数据集变化， 50的话是 3.95  3.96
         if(initilization_frame_buffer_.size()>=50)
         {
-
             vio_init = vio_process();
 
             if(!vio_init)
@@ -289,18 +289,20 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
     if(gray.channels() == 3)
         cv::cvtColor(gray, gray, cv::COLOR_RGB2GRAY);
 
-    Vector3d ba_last,bg_last;
+    Vector3d ba_last,bg_last,v_last;
     ba_last.setZero();
     bg_last.setZero();
     if(last_frame_ != nullptr)
     {
-        ba_last=last_frame_->ba;
-        bg_last=last_frame_->bg;
+        ba_last=last_frame_->preintegration->ba;
+        bg_last=last_frame_->preintegration->bg;
+        v_last = last_frame_->v;
     }
     Preintegration::Ptr preintegration_frame;
     //! save imus to preintegration and send it to the frame
-    preintegration_frame=Imu_process(measure.first,ba_last,bg_last);
+    preintegration_frame = Imu_process(measure.first,ba_last,bg_last);
     current_frame_ = Frame::create(gray, timestamp, camera_, ba_last, bg_last,preintegration_frame);
+    current_frame_->v = v_last;
 
     all_frame_buffer_.emplace_back(current_frame_);
 
@@ -320,7 +322,7 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
     }
     else if(STAGE_RELOCALIZING == stage_)
     {
-        /*
+
         if(vio_init)
         {
             cout<<"STAGE_RELOCALIZING == stage_"<<endl;
@@ -328,7 +330,7 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
             mapper_->stopMainThread();
             waitKey(0);
         }
-         */
+
         status_ = relocalize();
     }
     sysTrace->stopTimer("processing");
@@ -396,63 +398,6 @@ System::Status System::initialize()
     return STATUS_INITAL_SUCCEED;
 }
 
-    System::Status System::reinitialize()
-    {
-
-        depth_filter_->clearF();
-        mapper_->clearmap();
-//        for(auto frame:initilization_frame_buffer_)
-//        {
-//            current_frame_=frame;
-//            initializer_->reAddImage(current_frame_);
-//        }
-
-
-        cout<<"begin reinit0"<<endl;
-        current_frame_=all_frame_buffer_[secondframe_id];
-        cout<<"begin reinit1"<<endl;
-        initializer_->reCreateInitalMap(systemScale);
-
-        //! SUCCESS 之后进行下面这一段
-        std::vector<Vector3d> points;
-        cout<<"begin reinit2"<<endl;
-        // todo 这个需要改
-        mapper_->createInitalMap(initializer_->getReferenceFrame(), current_frame_);
-
-        LOG(WARNING) << "number of init---------------------------------------------------------"<<current_frame_->id_;
-        LOG(WARNING) << "[System] Start two-view BA";
-
-        KeyFrame::Ptr kf0 = mapper_->map_->getKeyFrame(0);
-        KeyFrame::Ptr kf1 = mapper_->map_->getKeyFrame(1);
-
-
-//        LOG_ASSERT(kf0 != nullptr && kf1 != nullptr) << "Can not find intial keyframes in map!";
-//
-//        Optimizer::twoViewBundleAdjustment(kf0, kf1, true);
-//
-//        LOG(WARNING) << "[System] End of two-view BA";
-//
-//        current_frame_->setPose(kf1->pose());
-        cout<<"begin reinit3"<<endl;
-        current_frame_->setRefKeyFrame(kf1);
-
-        reference_keyframe_ = kf0;
-        last_keyframe_ = kf0;
-
-//    cout<<"kf1:"<<kf1->frame_id_<<endl;
-//    cout<<"kf1 pose:"<<kf1->Tcw().translation()<<endl;
-//    waitKey(0);
-        cout<<"begin reinit4"<<endl;
-        depth_filter_->insertFrame(current_frame_, kf1);
-        cout<<"begin reinit5"<<endl;
-        correctScale = true;
-
-        initializer_->reset();
-
-//    ros::shutdown();
-
-        return STATUS_INITAL_SUCCEED;
-    }
 
 System::Status System::tracking()
 {
@@ -469,8 +414,6 @@ System::Status System::tracking()
     current_frame_->setRefKeyFrame(reference_keyframe_);
 
 
-    cout<<"reference_keyframe_ id :"<<reference_keyframe_->frame_id_<<endl;
-
     //! track seeds
 
     //todo 没有种子点怎么办?
@@ -479,15 +422,12 @@ System::Status System::tracking()
     // TODO 先验信息怎么设置？
 
     current_frame_->setPose(last_frame_->pose());
+
     ///粗略估计当前帧的位姿，而不是像ORB那样很粗略
     //! alignment by SE3
     AlignSE3 align;
     sysTrace->startTimer("img_align");
-//    cout<<"test features size :"<<endl;
-//    cout<<current_frame_->featureNumber()<<endl;
-
     align.run(last_frame_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8);
-//    cout<<current_frame_->featureNumber()<<endl;
     sysTrace->stopTimer("img_align");
 
     //! track local map
@@ -508,18 +448,15 @@ System::Status System::tracking()
 
     cout<<"matches:"<<matches<<endl;
 
-
-
     // TODO tracking status
     if(matches < Config::minQualityFts())
         return STATUS_TRACKING_BAD;
-
     //! motion-only BA
     sysTrace->startTimer("motion_ba");
 
     //todo by jh 最主要的就是改这个函数了,注意使用上面的 vio_init
 //    cout<<"test 3"<<endl;
-    Optimizer::motionOnlyBundleAdjustment(last_frame_,current_frame_, false,vio_init, false, true);
+    Optimizer::motionOnlyBundleAdjustment(last_frame_,current_frame_, false ,vio_init, true, true);
     sysTrace->stopTimer("motion_ba");
 
     sysTrace->startTimer("per_depth_filter");
@@ -579,7 +516,7 @@ System::Status System::relocalize()
     if(matches < 30)
         return STATUS_TRACKING_BAD;
 
-    Optimizer::motionOnlyBundleAdjustment(current_frame_, false, true, true);
+    Optimizer::motionOnlyBundleAdjustment(last_frame_,current_frame_, true, true, true);
 
     if(current_frame_->featureNumber() < 30)
         return STATUS_TRACKING_BAD;
@@ -683,7 +620,7 @@ bool System::createNewKeyFrame(int matches)
     Vector3d tran = T_cur_from_ref.translation();
     double dist1 = tran.dot(tran);
     double dist2 = 0.01 * (T_cur_from_ref.rotationMatrix() - Matrix3d::Identity()).norm();
-    if(dist1+dist2  < 0.01 * median_depth)
+    if(dist1+dist2  < /*0.01*/0.01 * median_depth)
         c1 = false;
 
     //! jh 放宽初始化时的条件
@@ -731,7 +668,8 @@ bool System::createNewKeyFrame(int matches)
 //    bool c4 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.9;
 
     //! create new keyFrame
-    if(c1 && (c2 || c3 ) || (cjh && !vio_init) || matches < 80)
+    //! 这里好像没有什么用
+    if(c1 && (c2 || c3 )/* || (cjh && !vio_init) || matches < 150*/)
     {
         //! create new keyframe
         KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
@@ -923,13 +861,15 @@ bool System::vio_process()
         systemScale=(x.tail<1>())(0)/100;
 //        systemScale = 1;
 
-        vector<uint64_t > ids;
-        vector<uint64_t > ids_mp;
+
+//    waitKey(0);
+
         for(auto &frame:initilization_frame_buffer_)
         {
-            frame->optimal_Tcw_=frame->Tcw();
-            frame->optimal_Tcw_.translation() *= systemScale;
-            frame->setTcw(frame->optimal_Tcw_);
+
+                frame->optimal_Tcw_=frame->Tcw();
+                frame->optimal_Tcw_.translation() *= systemScale;
+                frame->setTcw(frame->optimal_Tcw_);
 
             /*
 //            MapPoints mpts;
@@ -954,8 +894,12 @@ bool System::vio_process()
 //                }
 //            }
              */
-            frame->removeAllSeed();
+//            frame->removeAllSeed();
         }
+
+
+
+
         return true;
     }
 

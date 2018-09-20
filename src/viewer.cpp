@@ -25,15 +25,9 @@ void Viewer::setStop()
         std::lock_guard<std::mutex> lock(mutex_frame_);
         for(auto &tra:frame_trajectory_)
         {
-//            cout<<"before: "<endl<<tra<<endl;
             tra *= scale;
-//            cout<<"after: "<endl<<tra<<endl;
         }
-//        int trajectory_duration = -1;
-//        pangolin::Var<int> settings_trajectory_duration("menu.Traj Duration",2000, 1, 10000,false);
-//        trajectory_duration = settings_trajectory_duration.Get();
-//        if(trajectory_duration == 10000) trajectory_duration = -1;
-//        drawTrajectory(trajectory_duration);
+
     }
 
 bool Viewer::isRequiredStop()

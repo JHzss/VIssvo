@@ -51,11 +51,6 @@ namespace ssvo
 
 //        cout<<"first -------------"<<p<<" "<<v<<" "<<phi<<endl;
 //        cout<<"delta -------------"<<p_dt<<" "<<v_dt<<" "<<phi_dt<<endl;
-
-
-
-
-
         Eigen::Map<Eigen::Vector3d > p_re(x_plus_delta);
         Eigen::Map<Eigen::Vector3d > v_re(x_plus_delta+3);
         Eigen::Map<Eigen::Vector3d > phi_re(x_plus_delta+6);
@@ -68,17 +63,6 @@ namespace ssvo
         phi_re = so3_tmp.log();
 
 //        cout<<"result -------------"<<p_re<<" "<<v_re<<" "<<phi_re <<endl;
-
-        /*
-        frame_->v += v_dt;
-
-        Sophus_new::SO3 dR = Sophus_new::SO3::exp(phi_dt);
-        Sophus::SE3d pose_;
-        pose_ = frame_->optimal_Tcw_;
-        pose_.rotationMatrix() *= dR;
-        pose_.translation() += p_dt;
-        frame_->setTcw(pose_);
-         */
 
         return true;
     }

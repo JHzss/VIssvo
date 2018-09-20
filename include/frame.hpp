@@ -131,7 +131,7 @@ public:
     }
 
     //!ba bg bias
-    Vector3d ba,bg;
+//    Vector3d ba,bg;
     Vector3d v;
     double s;
 
