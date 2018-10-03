@@ -6,8 +6,8 @@
 namespace ssvo
 {
 
-///估计陀螺仪bais
-Vector3d EstimateGyrBais(deque<Frame::Ptr> &initilization_frame_buffer_)
+///估计陀螺仪bias
+Vector3d EstimateGyrBias(deque<Frame::Ptr> &initilization_frame_buffer_)
 {
     std::deque<Frame::Ptr>::iterator iter;
     int i=0;
@@ -128,7 +128,7 @@ bool EstimateGVS(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x)
     double velocity_frame[frame_count][3];
     double gravity[3];
     double scale[1];
-    double acc_bais[3]={0};
+    double acc_bias[3]={0};
     Vector3d gravity_v;
     double s;
     gravity_v=x.segment<3>(frame_count*3);
@@ -151,7 +151,7 @@ bool EstimateGVS(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x)
     }
     problem.AddParameterBlock(gravity,3);
     problem.AddParameterBlock(scale,1);
-    problem.AddParameterBlock(acc_bais,3);
+    problem.AddParameterBlock(acc_bias,3);
 //        problem.SetParameterBlockConstant(scale);
 
         for(int i;i<frame_count-1;i++)
@@ -169,7 +169,7 @@ bool EstimateGVS(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x)
             double dt= initilization_frame_buffer_[j]->preintegration->sum_t;
 
             ssvo::ceres_slover::GVSError* GVSerror= new ssvo::ceres_slover::GVSError(Rbi_w,Rbj_w,Pw_ci,Pw_cj,delta_a,delta_v,jacobian_P_ba,jacobian_V_ba,dt);
-            problem.AddResidualBlock(GVSerror,NULL,velocity_frame[i],velocity_frame[j],gravity,scale,acc_bais);
+            problem.AddResidualBlock(GVSerror,NULL,velocity_frame[i],velocity_frame[j],gravity,scale,acc_bias);
 
         }
         ceres::Solver::Options options;
@@ -185,7 +185,7 @@ bool EstimateGVS(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x)
         ROS_DEBUG("Iterations : %d", static_cast<int>(summary.iterations.size()));
         cout<<"gravity:"<<gravity[0]<<" "<<gravity[1]<<" "<<gravity[2]<<endl;
         cout<<"scale:"<<scale[0]<<endl;
-        cout<<"ba:"<<acc_bais[0]<<" "<<acc_bais[1]<<" "<<acc_bais[2]<<" "<<endl;
+        cout<<"ba:"<<acc_bias[0]<<" "<<acc_bias[1]<<" "<<acc_bias[2]<<" "<<endl;
 
 //        ros::shutdown();
 
@@ -292,7 +292,7 @@ bool RefineGravity(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x)
         double velocity_frame[frame_count][3];
         double gravity[3];
         double scale[1];
-        double acc_bais[3]={0};
+        double acc_bias[3]={0};
         Vector3d gravity_v;
         double s;
         gravity_v=g0;
@@ -314,7 +314,7 @@ bool RefineGravity(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x)
         }
         problem.AddParameterBlock(gravity,3);
         problem.AddParameterBlock(scale,1);
-        problem.AddParameterBlock(acc_bais,3);
+        problem.AddParameterBlock(acc_bias,3);
         problem.SetParameterBlockConstant(scale);
         problem.SetParameterBlockConstant(gravity);
 
@@ -333,7 +333,7 @@ bool RefineGravity(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x)
             double dt= initilization_frame_buffer_[j]->preintegration->sum_t;
 
             ssvo::ceres_slover::GVSError* GVSerror= new ssvo::ceres_slover::GVSError(Rbi_w,Rbj_w,Pw_ci,Pw_cj,delta_a,delta_v,jacobian_P_ba,jacobian_V_ba,dt);
-            problem.AddResidualBlock(GVSerror,NULL,velocity_frame[i],velocity_frame[j],gravity,scale,acc_bais);
+            problem.AddResidualBlock(GVSerror,NULL,velocity_frame[i],velocity_frame[j],gravity,scale,acc_bias);
 
         }
         ceres::Solver::Options options;
@@ -349,7 +349,7 @@ bool RefineGravity(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x)
         ROS_DEBUG("Iterations : %d", static_cast<int>(summary.iterations.size()));
         cout<<"gravity:"<<gravity[0]<<" "<<gravity[1]<<" "<<gravity[2]<<endl;
         cout<<"scale:"<<scale[0]<<endl;
-        cout<<"ba:"<<acc_bais[0]<<" "<<acc_bais[1]<<" "<<acc_bais[2]<<" "<<endl;
+        cout<<"ba:"<<acc_bias[0]<<" "<<acc_bias[1]<<" "<<acc_bias[2]<<" "<<endl;
 
 */
 //        waitKey(0);

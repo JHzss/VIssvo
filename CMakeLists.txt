@@ -20,9 +20,15 @@ if(SSVO_DBOW_ENABLE)
     add_definitions(-DSSVO_DBOW_ENABLE)
 endif()
 
+add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
+
 ## -----------------------
 ## Build setting
 ## -----------------------
+
+set(CMAKE_BUILD_TYPE Release)
+#set(CMAKE_BUILD_TYPE Debug)
+
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
@@ -168,6 +174,7 @@ LIST(APPEND SOURCEFILES
     src/brief.cpp
         src/so3.cpp
         src/PosePVR.cpp
+        src/imudata.cpp
 )
 
 add_library(${PROJECT_NAME} STATIC ${SOURCEFILES})
@@ -218,8 +225,8 @@ target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
 ## -----------------------
 ## Build VO
 ## -----------------------
-#add_executable(monoVO_euroc demo/monoVO_euroc.cpp)
-#target_link_libraries(monoVO_euroc ${PROJECT_NAME} ${catkin_LIBRARIES})
+add_executable(monoVO_euroc demo/monoVO_euroc.cpp)
+target_link_libraries(monoVO_euroc ${PROJECT_NAME} ${catkin_LIBRARIES})
 
-add_executable(monoVO_live demo/monoVO_live.cpp)
-target_link_libraries(monoVO_live ${PROJECT_NAME} ${catkin_LIBRARIES} ${OpenCV_LIBS})
+#add_executable(monoVO_live demo/monoVO_live.cpp)
+#target_link_libraries(monoVO_live ${PROJECT_NAME} ${catkin_LIBRARIES} ${OpenCV_LIBS})

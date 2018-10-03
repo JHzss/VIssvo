@@ -12,6 +12,7 @@
 #include "depth_filter.hpp"
 #include "viewer.hpp"
 #include "preintegration.h"
+#include "imudata.h"
 
 namespace ssvo {
 
@@ -38,9 +39,12 @@ public:
 
     ~System();
 
+    void process(pair<vector<ssvo::IMUData>,pair<Mat,double>> measurement);
+
     void process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr> &measure);
 
     Preintegration::Ptr Imu_process(vector<sensor_msgs::ImuPtr> &imus, Vector3d &ba, Vector3d &bg);
+    Preintegration::Ptr Imu_process(vector<ssvo::IMUData> &imus, Vector3d &ba, Vector3d &bg);
 
     std::string IMAGE_TOPIC_s;
     std::string IMU_TOPIC_s;

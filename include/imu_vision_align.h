@@ -14,11 +14,11 @@
 #include "optimizer.hpp"
 #include <opencv2/core/eigen.hpp>
 
-///估计陀螺仪bais
+///估计陀螺仪bias
 namespace ssvo
 {
 
-Vector3d EstimateGyrBais(deque<Frame::Ptr> &initilization_frame_buffer_);
+Vector3d EstimateGyrBias(deque<Frame::Ptr> &initilization_frame_buffer_);
 
 ///估计重力、速度、尺度
 bool EstimateGVS(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x);

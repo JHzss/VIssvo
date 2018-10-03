@@ -34,13 +34,10 @@ bool PoseLocalParameterization::ComputeJacobian(const double *x, double *jacobia
 
 namespace ssvo
 {
-    PosePVR::PosePVR() //!顶层const 指针不能变，指向的内容可以变
-    {}
-
+     //!顶层const 指针不能变，指向的内容可以变
     //在一个类里定义了一个const成员函数后，则此函数不能修改类中的成员变量，
     bool PosePVR::Plus(const double *x, const double *delta, double *x_plus_delta) const
     {
-//        cout<<"plusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplusplus"<<endl;
         Eigen::Map<const Eigen::Vector3d > p(x);
         Eigen::Map<const Eigen::Vector3d > v(x+3);
         Eigen::Map<const Eigen::Vector3d > phi(x+6);
@@ -49,8 +46,9 @@ namespace ssvo
         Eigen::Map<const Eigen::Vector3d > v_dt(delta+3);
         Eigen::Map<const Eigen::Vector3d > phi_dt(delta+6);
 
-//        cout<<"first -------------"<<p<<" "<<v<<" "<<phi<<endl;
-//        cout<<"delta -------------"<<p_dt<<" "<<v_dt<<" "<<phi_dt<<endl;
+//        cout<<"origin ------------->"<<endl<<p<<endl<<endl<<v<<endl<<endl<<phi<<endl;
+
+//        cout<<"delta ------------->"<<endl<<p_dt<<endl<<endl<<v_dt<<endl<<endl<<phi_dt<<endl;
         Eigen::Map<Eigen::Vector3d > p_re(x_plus_delta);
         Eigen::Map<Eigen::Vector3d > v_re(x_plus_delta+3);
         Eigen::Map<Eigen::Vector3d > phi_re(x_plus_delta+6);
@@ -62,7 +60,7 @@ namespace ssvo
         Sophus_new::SO3 so3_tmp(r1);
         phi_re = so3_tmp.log();
 
-//        cout<<"result -------------"<<p_re<<" "<<v_re<<" "<<phi_re <<endl;
+//        cout<<"plus result ------------->"<<endl<<endl<<p_re<<endl<<endl<<v_re<<endl<<endl<<phi_re <<endl;
 
         return true;
     }
@@ -72,9 +70,11 @@ namespace ssvo
 
         Eigen::Map<Eigen::Matrix<double, 9, 9, Eigen::RowMajor>> j(jacobian);
 
-        Eigen::Matrix<double ,9,9> I9x9=Eigen::Matrix<double ,9,9>::Identity();
+        Eigen::Matrix<double ,9,9> I9x9 = Eigen::Matrix<double ,9 ,9 >::Identity();
 
         j=I9x9;
+
+//        cout<<"jjjjjjjjjjj"<<j<<endl;
 
     }
 

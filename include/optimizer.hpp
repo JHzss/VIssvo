@@ -141,6 +141,7 @@ public:
         residuals[1] *= weight_;
 
 //        cout<<"residul  pose----------------->"<<endl<<residuals[0]<<" "<<residuals[1]<<endl;
+//        cout<<"vision sqrt_info residual:"<<endl<<residuals<<endl;
 
         if(!jacobians) return true;
         double* jacobian0 = jacobians[0];
@@ -176,13 +177,13 @@ public:
         {
             Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > Jpoint(jacobian1);
 //            Jpoint = jacobian * q.toRotationMatrix();
-            Jpoint =  jacobian * Rcb*Rwb.transpose();
+            Jpoint =  jacobian * Rcb * Rwb.transpose();
 //            cout<<"Jpoint-------------------------------"<<Jpoint<<endl;
         }
         return true;
     }
 
-    static inline ceres::CostFunction *Create(const double observed_x, const double observed_y, const double weight = 1.0) {
+    static inline ceres::CostFunction *Create(const double observed_x, const double observed_y, const double weight = 460/1.5) {
         return (new ReprojectionErrorSE3(observed_x, observed_y, weight));
     }
 
@@ -436,19 +437,7 @@ private:
         virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
         {
 
-            //! 参数增量
-/*
-//            Eigen::Map<const Eigen::Vector3d> delta_pi(parameters[0]);
-//            Eigen::Map<const Eigen::Vector3d> delta_vi(parameters[0]+3);
-//            Eigen::Map<const Eigen::Vector3d> delta_phii(parameters[0]+6);
-//
-//            Eigen::Map<const Eigen::Vector3d> delta_bgi(parameters[1]);
-//            Eigen::Map<const Eigen::Vector3d> delta_bai(parameters[1]+3);
-//
-//            Eigen::Map<const Eigen::Vector3d> delta_pj(parameters[2]);
-//            Eigen::Map<const Eigen::Vector3d> delta_vj(parameters[2]+3);
-//            Eigen::Map<const Eigen::Vector3d> delta_phij(parameters[2]+6);
-             */
+
             Eigen::Map<const Eigen::Vector3d> Pi(parameters[0]);
             Eigen::Map<const Eigen::Vector3d> Vi(parameters[0]+3);
             Eigen::Map<const Eigen::Vector3d> PHIi(parameters[0]+6);
@@ -466,77 +455,14 @@ private:
             Eigen::Matrix3d Ri = Sophus::SO3d::exp(PHIi).matrix();
             Eigen::Matrix3d Rj = Sophus::SO3d::exp(PHIj).matrix();
 
-/*
-//            Matrix3d dR = Sophus::SO3d::exp(delta_phii).matrix();
-//
-//            Sophus::SE3d pose_;
-//            pose_ = last_frame_->Twb();
-//            pose_.rotationMatrix() = pose_.rotationMatrix() * dR;
-//            pose_.translation() += delta_pi;
-//            last_frame_->setTwb(pose_);
-//            last_frame_->v += delta_vi;
-//
-//            dR = Sophus::SO3d::exp(delta_phij).matrix();
-//            pose_ = cur_frame_->Twb();
-//            pose_.rotationMatrix() = pose_.rotationMatrix() * dR;
-//            pose_.translation() += delta_pj;
-//            cur_frame_->setTwb(pose_);
-//            cur_frame_->v += delta_vj;
-//            cur_frame_->optimal_Tcw_ = cur_frame_->Tcw();
-//
-//            last_frame_->ba += delta_bai;
-//            last_frame_->bg += delta_bgi;
-//            last_frame_->preintegration->ba += delta_bai;
-//            last_frame_->preintegration->bg += delta_bgi;
-
-
-            //! 得到两帧的 PVR bias 用于求误差函数
-//            SE3d T_lastFrame = last_frame_->Twb();
-//            SE3d T_curFrame = cur_frame_->Twb();
-
-//            Eigen::Vector3d Pi = T_lastFrame.translation();
-//            Eigen::Vector3d Vi = last_frame_->v;
-//            Eigen::Matrix3d Ri = Sophus::SO3d::exp(PHIi).matrix();
-//            Eigen::Vector3d Bai = last_frame_->ba;
-//            Eigen::Vector3d Bgi = last_frame_->bg;
-//
-//
-//            Eigen::Vector3d Pj = T_curFrame.translation();
-//            Eigen::Vector3d Vj = cur_frame_->v;
-//            Eigen::Matrix3d Rj = Sophus::SO3d::exp(PHIj).matrix();
-
-
-
-//            double dt = preintegration_->sum_t;
-//            Vector3d delta_pij = preintegration_->dp;
-//            Vector3d delta_vij = preintegration_->dv;
-//            Matrix3d delta_rij = preintegration_->dR;
-//            Vector3d gravity = G ;
-*/
-/*
-            Eigen::Map<const Eigen::Quaterniond> Qwb_i(parameters[0]);
-            Eigen::Map<const Eigen::Vector3d> Pwb_i(parameters[0] + 4);
-            Eigen::Map<const Eigen::Quaterniond> Qwb_j(parameters[2]);
-            Eigen::Map<const Eigen::Vector3d> Pwb_j(parameters[2] + 4);
-
-
-
-            Eigen::Vector3d Vi(parameters[1][0], parameters[1][1], parameters[1][2]);
-            Eigen::Vector3d Bai(parameters[1][3], parameters[1][4], parameters[1][5]);
-            Eigen::Vector3d Bgi(parameters[1][6], parameters[1][7], parameters[1][8]);
-
-            Eigen::Vector3d Vj(parameters[3][0], parameters[3][1], parameters[3][2]);
-            Eigen::Vector3d Baj(parameters[3][3], parameters[3][4], parameters[3][5]);
-            Eigen::Vector3d Bgj(parameters[3][6], parameters[3][7], parameters[3][8]);
-             */
-
             Eigen::Map<Eigen::Matrix<double, 9, 1>> residual(residuals);
 
 
             residual = preintegration_->evaluate(Pi, Ri, Vi, Bai, Bgi,
                                                  Pj, Rj, Vj, Baj, Bgj);
 
-            cout<<"original residual----------------->"<<endl<<residual<<endl;
+
+//            cout<<"ssvo imu original residual----------------->"<<endl<<residual<<endl;
 
 
             double sum_t = preintegration_->sum_t;
@@ -554,14 +480,17 @@ private:
             Eigen::Matrix3d JrBiasGCorr = Sophus_new::SO3::JacobianR(dr_dbg * (last_frame_->preintegration->bg - preintegration_->bg_tmp));// todo 检查一下
             Eigen::Matrix3d JrInv_rPhi = Sophus_new::SO3::JacobianRInv( rPhiij );
 
-//            cout<<"preintegration_->covariance:"<<endl<<preintegration_->covariance<<endl;
+//            cout<<"imu information matrix:"<<endl<<preintegration_->covariance.inverse()<<endl;
 
             // todo 这里有问题
             Eigen::Matrix<double, 9, 9> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 9, 9>>(preintegration_->covariance.inverse()).matrixL().transpose();
 
-            cout<<"sqrt_info:"<<endl<<sqrt_info<<endl;
+//            cout<<"ssvo sqrt_info:"<<endl<<sqrt_info<<endl;
+
             residual = sqrt_info * residual;
-            cout<<"sqrt_info residual:"<<endl<<residual<<endl;
+
+
+//            cout<<"ssvo imu sqrt_info residual:"<<endl<<residual<<endl;
 
             if (jacobians)
             {
@@ -577,33 +506,35 @@ private:
                     jacobian_pose_i.block<3, 3>(3, 6) = Sophus::SO3d::hat( Ri.inverse() * ( Vj - Vi - G * sum_t)  );// 0 3
                     jacobian_pose_i.block<3, 3>(6, 6) = - JrInv_rPhi * Rj.inverse() * Ri;
 
+//                    cout<<"jacobian_pose_i: "<<endl<<jacobian_pose_i<<endl;
+
                     jacobian_pose_i = sqrt_info * jacobian_pose_i;
 
-                    if (jacobian_pose_i.maxCoeff() > 1e8 || jacobian_pose_i.minCoeff() < -1e8)
-                    {
-                        ROS_WARN("numerical unstable in preintegration");
-                        //std::cout << sqrt_info << std::endl;
-                        ROS_BREAK();
-                    }
-
-//                    cout<<"jacobian_pose_i: "<<endl<<jacobian_pose_i<<endl;
+//                    if (jacobian_pose_i.maxCoeff() > 1e8 || jacobian_pose_i.minCoeff() < -1e8)
+//                    {
+//                        ROS_WARN("numerical unstable in preintegration");
+//                        //std::cout << sqrt_info << std::endl;
+//                        ROS_BREAK();
+//                    }
                 }
                 if (jacobians[1])
                 {
                     Eigen::Map<Eigen::Matrix<double, 9, 6, Eigen::RowMajor>> jacobian_speedbias_i(jacobians[1]);
 
                     jacobian_speedbias_i.setZero();
-                    jacobian_speedbias_i.block<3, 3>(0, 0) = -dp_dbg;
-                    jacobian_speedbias_i.block<3, 3>(0, 3) = -dp_dba;
-                    jacobian_speedbias_i.block<3, 3>(3, 0) = -dv_dbg;
-                    jacobian_speedbias_i.block<3, 3>(3, 3) = -dv_dba;
+                    jacobian_speedbias_i.block<3, 3>(0, 0) = - dp_dbg;
+                    jacobian_speedbias_i.block<3, 3>(0, 3) = - dp_dba;
+                    jacobian_speedbias_i.block<3, 3>(3, 0) = - dv_dbg;
+                    jacobian_speedbias_i.block<3, 3>(3, 3) = - dv_dba;
                     jacobian_speedbias_i.block<3, 3>(6, 0) = - JrInv_rPhi * ExprPhiijTrans * JrBiasGCorr * dr_dbg;
+
+//                    cout<<"jacobian_speedbias_i: "<<endl<<jacobian_speedbias_i<<endl;
 
                     jacobian_speedbias_i = sqrt_info * jacobian_speedbias_i;
 
-                    ROS_ASSERT(fabs(jacobian_speedbias_i.maxCoeff()) < 1e8);
-                    ROS_ASSERT(fabs(jacobian_speedbias_i.minCoeff()) < 1e8);
-//                    cout<<"jacobian_speedbias_i: "<<endl<<jacobian_speedbias_i<<endl;
+//                    ROS_ASSERT(fabs(jacobian_speedbias_i.maxCoeff()) < 1e8);
+//                    ROS_ASSERT(fabs(jacobian_speedbias_i.minCoeff()) < 1e8);
+//                    cout<<"sqrt jacobian_speedbias_i: "<<endl<<jacobian_speedbias_i<<endl;
                 }
                 if (jacobians[2])
                 {
@@ -614,14 +545,75 @@ private:
                     jacobian_pose_j.block<3, 3>(3, 3) = Ri.inverse();
                     jacobian_pose_j.block<3, 3>(6, 6) = JrInv_rPhi;
 
+//                    cout<<"jacobian_pose_j: "<<endl<<jacobian_pose_j<<endl;
+
                     jacobian_pose_j = sqrt_info * jacobian_pose_j;
 
-                    ROS_ASSERT(fabs(jacobian_pose_j.maxCoeff()) < 1e8);
-                    ROS_ASSERT(fabs(jacobian_pose_j.minCoeff()) < 1e8);
-//                    cout<<"jacobian_pose_j: "<<endl<<jacobian_pose_j<<endl;
+//                    ROS_ASSERT(fabs(jacobian_pose_j.maxCoeff()) < 1e8);
+//                    ROS_ASSERT(fabs(jacobian_pose_j.minCoeff()) < 1e8);
+//                    cout<<"sqrt jacobian_pose_j: "<<endl<<jacobian_pose_j<<endl;
                 }
 
+                //! check
+                /*
+                //! 检测雅克比矩阵
+                // 变化量小得时候才能线性的近似，0.1 -0.3 0.3 的时候误差就比较大
+                if (jacobians[2])
+                {
+
+                    Vector3d turb_p(0.01, -0.03, 0.03);
+                    Vector3d turb_v(0.01, -0.03, 0.03);
+                    Vector3d turb_phi(0.01, -0.03, 0.03);
+                    Matrix<double, 9, 1> turb;
+                    turb << 0.01, -0.03, 0.03, 0.01, -0.03, 0.03, 0.01, -0.03, 0.03;
+
+                    Matrix3d Rj_turb = Rj * Sophus::SO3d::exp(turb_phi).matrix();
+
+                    Eigen::Map<Eigen::Matrix<double, 9, 9, Eigen::RowMajor>> jacobian_pose_j_(jacobians[2]);
+
+                    Eigen::Matrix<double, 9, 1> residual_dt = preintegration_->evaluate(Pi, Ri, Vi, Bai, Bgi,
+                                                                                        Pj + turb_p, Rj_turb, Vj + turb_v,
+                                                                                        Baj, Bgj);
+                    cout << "jacobian_pose_j----------: " << endl << jacobian_pose_j_ << endl;
+
+                    cout << "original residual----------------->" << endl << residual << endl;
+
+                    cout << "????????????????????????????????????????????????????????????????????????????????????????????" << endl;
+
+                    cout << "original residual_dt----------------->" << endl << residual_dt << endl;
+
+                    cout << "jacobian_pose_j * turb----------------->" << endl << jacobian_pose_j_ * turb << endl;
+
+                    cout << "yanzheng pj:" << endl << (residual_dt - residual - jacobian_pose_j_ * turb) << endl;
+
+                }
+
+                if (jacobians[1])
+                {
+
+                    Vector3d turb_ba(0.01, -0.03, 0.03);
+                    Vector3d turb_bg(0.01, -0.03, 0.03);
+
+                    Matrix<double, 6, 1> turb;
+                    turb << 0.01, -0.03, 0.03, 0.01, -0.03, 0.03;
+
+
+                    Eigen::Map<Eigen::Matrix<double, 9, 6, Eigen::RowMajor>> jacobian_speedbias_i(jacobians[1]);
+
+                    Eigen::Matrix<double, 9, 1> residual_dt = preintegration_->evaluate(Pi, Ri, Vi, Bai + turb_ba,
+                                                                                        Bgi + turb_bg,
+                                                                                        Pj, Rj, Vj, Baj, Bgj);
+                    cout << "jacobian_speedbias_i----------: " << endl << jacobian_speedbias_i << endl;
+
+                    cout << "original residual_dt----------------->" << endl << residual_dt << endl;
+
+                    cout << "yanzheng bias:" << endl << (residual_dt - residual - jacobian_speedbias_i * turb) << endl;
+                }
+                 */
+
             }
+
+            return true;
         }
 
         const Frame::Ptr last_frame_,cur_frame_;
@@ -629,55 +621,61 @@ private:
     };
 
 
-    class BiasError: public ceres::SizedCostFunction<6,3,3,3,3>
+    class BiasError: public ceres::SizedCostFunction<6,6,6>
     {
     public:
-        BiasError(Preintegration* preintegration):preintegration_(preintegration)
+        BiasError(Preintegration::Ptr preintegration):preintegration_(preintegration)
         {}
         virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
         {
-            Eigen::Vector3d Bai(parameters[0][0], parameters[0][1], parameters[0][2]);
-            Eigen::Vector3d Bgi(parameters[1][0], parameters[1][1], parameters[1][2]);
-            Eigen::Vector3d Baj(parameters[2][0], parameters[2][1], parameters[2][2]);
-            Eigen::Vector3d Bgj(parameters[3][0], parameters[3][1], parameters[3][2]);
+
+            Eigen::Map<const Eigen::Matrix<double,6,1>> Bias_i(parameters[0]);
+            Eigen::Map<const Eigen::Matrix<double,6,1>> Bias_j(parameters[1]);
 
             Eigen::Map<Eigen::Matrix<double, 6, 1>> residual(residuals);
-            residual.block<3,1>(0,0)=Baj-Bai;
-            residual.block<3,1>(3,0)=Bgj-Bgi;
+            residual = Bias_j-Bias_i;
 
-            Eigen::Matrix<double, 6, 6> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 6, 6>>(preintegration_->noise_bais.inverse()).matrixL().transpose();
+//            cout<<"ssvo bias original residual----------------->"<<endl<<residual<<endl;
+
+            Matrix<double,6,6> InvCovBgaRW = Matrix<double,6,6>::Identity();
+            InvCovBgaRW.topLeftCorner(3,3) = Matrix3d::Identity()/IMUData::getGyrBiasRW2();       // Gyroscope bias random walk, covariance INVERSE
+            InvCovBgaRW.bottomRightCorner(3,3) = Matrix3d::Identity()/IMUData::getAccBiasRW2();   // Accelerometer bias random walk, covariance INVERSE
+
+//            cout<<"bias information matrix:"<<endl<<InvCovBgaRW/preintegration_->sum_t<<endl;
+
+            Eigen::Matrix<double, 6, 6> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 6, 6>>(InvCovBgaRW/preintegration_->sum_t).matrixL().transpose();
             residual = sqrt_info * residual;
 
+//            cout<<"ssvo bias sqrt_info residual:"<<endl<<residual<<endl;
+
+
+            //todo 
             if (jacobians)
             {
 
                 if (jacobians[0])
                 {
-                    Eigen::Map<Eigen::Matrix<double, 3, 3>> jacobian_bai(jacobians[0]);
-                    jacobian_bai = -Matrix<double,3,3>::Identity();
+                    Eigen::Map<Eigen::Matrix<double, 6, 6>> jacobian_bias_i(jacobians[0]);
+                    jacobian_bias_i = -Matrix<double,6,6>::Identity();
+
+                    jacobian_bias_i = sqrt_info * jacobian_bias_i;
 
                 }
                 if (jacobians[1])
                 {
-                    Eigen::Map<Eigen::Matrix<double, 3, 3>> jacobian_bgi(jacobians[1]);
-                    jacobian_bgi = -Matrix<double,3,3>::Identity();
+                    Eigen::Map<Eigen::Matrix<double, 6, 6>> jacobian_bias_j(jacobians[1]);
+                    jacobian_bias_j = Matrix<double,6,6>::Identity();
+
+                    jacobian_bias_j = sqrt_info * jacobian_bias_j;
                 }
-                if (jacobians[2])
-                {
-                    Eigen::Map<Eigen::Matrix<double, 3, 3>> jacobian_baj(jacobians[2]);
-                    jacobian_baj = Matrix<double,3,3>::Identity();
-                }
-                if (jacobians[3])
-                {
-                    Eigen::Map<Eigen::Matrix<double, 3, 3>> jacobian_bgj(jacobians[3]);
-                    jacobian_bgj = Matrix<double,3,3>::Identity();
-                }
+
             }
+
+            return true;
         }
 
-        Preintegration* preintegration_;
+        Preintegration::Ptr preintegration_;
     };
-
 
 }//! namespace ceres
 

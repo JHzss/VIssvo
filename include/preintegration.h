@@ -8,6 +8,7 @@
 #include "global.hpp"
 #include "new_parameters.h"
 #include <opencv2/core/eigen.hpp>
+#include "imudata.h"
 
 namespace ssvo {
 
@@ -43,8 +44,6 @@ namespace ssvo {
             Vector3d w;
             w = jacobian_R_bg * dbg;
 
-
-
             deltaR_wt_eigen = Sophus_new::SO3::exp(w).matrix();
             cout<<"deltaR_wt_eigen: "<<endl<<deltaR_wt_eigen<<endl;
 
@@ -65,8 +64,24 @@ namespace ssvo {
         Eigen::Matrix<double, 9, 9> covariance;
         Vector3d ba_tmp,bg_tmp;// 用于imu残差优化，存储上一次预积分时的加速度计参数
         Eigen::Vector3d ba, bg;
+
+        /**
+         * For EuRoc dataset, according to V1_01_easy/imu0/sensor.yaml
+         * The params:
+         * sigma_g: 1.6968e-4       rad / s / sqrt(Hz)
+         * sigma_gw: 1.9393e-5      rad / s^2 / sqrt(Hz)
+         * sigma_a: 2.0e-3          m / s^2 / sqrt(Hz)
+         * sigma_aw: 3.0e-3         m / s^3 / sqrt(Hz)
+         */
+//        double hz_inv_t = 0.005;
+//        double sigma_g = 1.6968e-4;
+//        double sigma_a = 2.0e-3;
+//        double sigma_gw = 1.9393e-5;
+//        double sigma_aw = 3.0e-3 ;
+
+
         Matrix3d noise_ba,noise_bg;
-        Matrix<double,6,6> noise_bais;
+        Matrix<double,6,6> noise_bias;
 
         double dt, sum_t;
         vector<double> dt_buf;

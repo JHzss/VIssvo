@@ -1,4 +1,5 @@
 #include <iomanip>
+#include <include/optimizer.hpp>
 #include "optimizer.hpp"
 #include "config.hpp"
 #include "utils.hpp"
@@ -433,10 +434,18 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
         bias_i[3] = last_frame->preintegration->ba.x();
         bias_i[4] = last_frame->preintegration->ba.y();
         bias_i[5] = last_frame->preintegration->ba.z();
-//    problem.AddParameterBlock(last_frame_ba[0],3);
-//    problem.AddParameterBlock(last_frame_bg[0],3);
-//    problem.AddParameterBlock(frame_ba[0],3);
-//    problem.AddParameterBlock(frame_bg[0],3);
+
+        double bias_j[6];
+        bias_j[0] = frame->preintegration->bg.x();
+        bias_j[1] = frame->preintegration->bg.y();
+        bias_j[2] = frame->preintegration->bg.z();
+        bias_j[3] = frame->preintegration->ba.x();
+        bias_j[4] = frame->preintegration->ba.y();
+        bias_j[5] = frame->preintegration->ba.z();
+
+
+        problem.AddParameterBlock(bias_i,6);
+        problem.AddParameterBlock(bias_j,6);
 
     static const double scale = Config::imagePixelUnSigma() * std::sqrt(3.81);
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
@@ -444,21 +453,23 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
     std::vector<Feature::Ptr> fts;
     frame->getFeatures(fts);
     const size_t N = fts.size();
+    std::vector<ceres::ResidualBlockId> res_ids(N);
 
-    std::vector<ceres::ResidualBlockId> res_ids(N+1);
-    for(size_t i = 0; i < N; ++i)
-    {
-        Feature::Ptr ft = fts[i];
-        MapPoint::Ptr mpt = ft->mpt_;
-        if(mpt == nullptr)
-            continue;
 
-        mpt->optimal_pose_ = mpt->pose();
-        ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
-//        res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
-        res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->PVR, mpt->optimal_pose_.data());
-        problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
-    }
+
+            for(size_t i = 0; i < N; ++i)
+            {
+                Feature::Ptr ft = fts[i];
+                MapPoint::Ptr mpt = ft->mpt_;
+                if(mpt == nullptr)
+                    continue;
+
+                mpt->optimal_pose_ = mpt->pose();
+                ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
+                res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->PVR, mpt->optimal_pose_.data());
+                problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
+            }
+
 
 //    if(N < OPTIMAL_MPTS)
         //! false 不用种子点，用了效果不好
@@ -499,16 +510,20 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 
 //        ceres::LocalParameterization* PVRpose = new PosePVR();
     //! by jh
-    if(vio)
-    {
-        problem.AddParameterBlock(last_frame->PVR,9,pvrpose);
-        problem.SetParameterBlockConstant(last_frame->PVR);
+        if(vio)
+        {
+            //! imu误差
+            problem.AddParameterBlock(last_frame->PVR,9,pvrpose);
+            problem.SetParameterBlockConstant(last_frame->PVR);
 
-        ceres_slover::IMUError* imu_factor = new ceres_slover::IMUError(last_frame,frame);
-        res_ids[N]=problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,bias_i,frame->PVR);
+            ceres::CostFunction* imu_factor = new ceres_slover::IMUError(last_frame,frame);
+            problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,bias_i,frame->PVR);
 
-    }
+          //! bias误差
+            ceres::CostFunction* bias_factor = new ceres_slover::BiasError(frame->preintegration);
+            problem.AddResidualBlock(bias_factor,NULL,bias_i,bias_j);
 
+        }
 
     ceres::Solver::Options options;
     ceres::Solver::Summary summary;
@@ -519,15 +534,14 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
     ceres::Solve(options, &problem, &summary);
         
 
-    if(reject)
+        //todo 改了特诊点的权重之后先不要加这个东西！！！
+    if(0/*reject*/)
     {
-        int M = N;
-//        if(vio)
-//            M = M+1;
+
         int remove_count = 0;
 
         static const double TH_REPJ = 3.81 * Config::imagePixelUnSigma2();
-        for(size_t i = 0; i < M; ++i)
+        for(size_t i = 0; i < N; ++i)
         {
             Feature::Ptr ft = fts[i];
             if(reprojectionError(problem, res_ids[i]).squaredNorm() > TH_REPJ * (1 << ft->level_))
@@ -556,17 +570,17 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 
 
         frame->setTwb(tmp);
-//        last_frame->bg = Eigen::Vector3d(bias_i[0],bias_i[1],bias_i[2]);
+
         last_frame->preintegration->bg = Eigen::Vector3d(bias_i[0],bias_i[1],bias_i[2]);
-//        last_frame->ba = Eigen::Vector3d(bias_i[3],bias_i[4],bias_i[5]);
         last_frame->preintegration->ba = Eigen::Vector3d(bias_i[3],bias_i[4],bias_i[5]);
 
-        frame->v = Vector3d(frame->PVR[3],frame->PVR[5],frame->PVR[5]);
+        frame->preintegration->bg = Eigen::Vector3d(bias_j[0],bias_j[1],bias_j[2]);
+        frame->preintegration->ba = Eigen::Vector3d(bias_j[3],bias_j[4],bias_j[5]);
 
-//    frame->setTcw(frame->optimal_Tcw_);
+        frame->v = Vector3d(frame->PVR[3],frame->PVR[4],frame->PVR[5]);
 
     //! Report
-    reportInfo(problem, summary, report, verbose);
+//    reportInfo(problem, summary, report, verbose);
 }
 
 void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report, bool verbose)

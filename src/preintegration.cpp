@@ -27,12 +27,12 @@ namespace ssvo {
     Preintegration::Preintegration(Vector3d &ba_, Vector3d &bg_) : sum_t(0),ba(ba_),bg(bg_),
             covariance(Eigen::Matrix<double,9,9>::Zero()),dp(Eigen::Vector3d::Zero()),dv(Eigen::Vector3d::Zero()),dR(Eigen::Matrix<double,3,3>::Identity())
     {
-        noise_ba=(acc_n*acc_n)* Matrix3d::Identity()/0.005;
-        noise_bg=(gyr_n*gyr_n)* Matrix3d::Identity()/0.005;
+        noise_ba = Matrix3d::Identity()*2.0e-3*2.0e-3/0.005*100; /*(acc_n*acc_n)* Matrix3d::Identity()/0.005*/
+        noise_bg = Matrix3d::Identity()*1.7e-4*1.7e-4/0.005; /*(gyr_n*gyr_n)* Matrix3d::Identity()/0.005*/
 //        noise_ba=Matrix3d::Identity()*2.0e-3*2.0e-3/0.005*100;
 //        noise_bg=Matrix3d::Identity()*1.7e-4*1.7e-4/0.005;
-        noise_bais.topLeftCorner(3,3)=noise_ba;
-        noise_bais.bottomRightCorner(3,3)=noise_bg;
+        noise_bias.topLeftCorner(3,3)=noise_ba;
+        noise_bias.bottomRightCorner(3,3)=noise_bg;
         jacobian_P_ba =Matrix3d::Zero();     // position / gyro
         jacobian_P_bg =Matrix3d::Zero();     // position / acc
         jacobian_V_ba =Matrix3d::Zero();     // velocity / gyro
@@ -44,8 +44,8 @@ namespace ssvo {
     void Preintegration::run()
     {
         Vector3d acc_tmp,gyr_tmp;
-        ba_tmp=ba;
-        bg_tmp=bg;
+        ba_tmp = ba;
+        bg_tmp = bg;
         for(int i=0;i<dt_buf.size();i++)
         {
             if(i==0)
@@ -130,25 +130,29 @@ namespace ssvo {
             //! calculate Jacobian and coverance
             //todo 这个的理解还是不够，
                 //! SVO作者 On-Manifold Preintegration for Real-Time Visual--Inertial Odometry APPENDIX-A
-                Matrix<double,9,9> A=Matrix<double,9,9>::Identity();
-                A.block(0,3,3,3)=dt*Matrix3d::Identity();
-                A.block(0,6,3,3)=-0.5*dR*skew(acc_tmp)*dt*dt;
-                A.block(3,6,3,3)=-dR*skew(acc_tmp)*dt;
-                A.block(6,6,3,3)=deltaR_wt_eigen.transpose();
+                Matrix<double,9,9> A = Matrix<double,9,9>::Identity();
+                A.block(0,3,3,3) = dt*Matrix3d::Identity();
+                A.block(0,6,3,3) = -0.5*dR*skew(acc_tmp)*dt*dt;
+                A.block(3,6,3,3) = -dR*skew(acc_tmp)*dt;
+                A.block(6,6,3,3) = deltaR_wt_eigen.transpose();
 
-                Matrix<double,9,3> Ba=Matrix<double,9,3>::Zero();
-                Ba.block(0,0,3,3)=0.5*dR*dt*dt;
-                Ba.block(3,0,3,3)=dR*dt;
+                Matrix<double,9,3> Ba = Matrix<double,9,3>::Zero();
+                Ba.block(0,0,3,3) = 0.5*dR*dt*dt;
+                Ba.block(3,0,3,3) = dR*dt;
 
-                Matrix<double,9,3> Bg=Matrix<double,9,3>::Zero();
-                Bg.block(6,0,3,3)=Jr*dt;
+                Matrix<double,9,3> Bg = Matrix<double,9,3>::Zero();
+                Bg.block(6,0,3,3) = Jr*dt;
 
-                covariance = A*covariance*A.transpose()+Ba*noise_ba*Ba.transpose()+Bg*noise_bg*Bg.transpose();
+                covariance = A*covariance*A.transpose()+Ba*IMUData::getAccMeasCov()*Ba.transpose()+Bg*IMUData::getGyrMeasCov()*Bg.transpose();
 
-            /// calculate the jacobian to bais to update the dp v R
+//            std::cout<<"ssvo A:------------------------------------"<<std::endl<<A<<std::endl;
+//            std::cout<<"ssvo Bg:------------------------------------"<<std::endl<<Bg<<std::endl;
+//            std::cout<<"ssvo Ba:------------------------------------"<<std::endl<<Ba<<std::endl;
 
-                jacobian_P_ba += jacobian_V_ba*dt-0.5*dR*dt*dt;
-                jacobian_P_bg += jacobian_V_bg*dt-0.5*dR*skew(acc_tmp)*jacobian_R_bg*dt*dt;
+            /// calculate the jacobian to bias to update the dp v R
+
+                jacobian_P_ba += jacobian_V_ba*dt - 0.5*dR*dt*dt;
+                jacobian_P_bg += jacobian_V_bg*dt - 0.5*dR*skew(acc_tmp)*jacobian_R_bg*dt*dt;
                 jacobian_V_ba += -dR*dt;
                 jacobian_V_bg += -dR*skew(acc_tmp)*jacobian_R_bg*dt;
                 //todo 这个公式跟论文中不一样，是为什么？
@@ -173,7 +177,7 @@ namespace ssvo {
             acc_tmp=acc_buf[i]-ba;
             gyr_tmp=gyr_buf[i]-bg;
         }
-        cout<<"covariance:"<<endl<<covariance<<endl;
+//        cout<<"covariance:"<<endl<<covariance<<endl;
     }
 
     //todo 重新传播

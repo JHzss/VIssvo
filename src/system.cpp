@@ -12,7 +12,7 @@ namespace ssvo{
 
 std::string Config::FileName;
 
-TimeTracing::Ptr sysTrace = nullptr;
+//TimeTracing::Ptr sysTrace = nullptr;
 
 System::System(std::string config_file) :
     stage_(STAGE_INITALIZE), status_(STATUS_INITAL_RESET),
@@ -95,14 +95,14 @@ System::System(std::string config_file) :
     log_names.push_back("stage");
 
     string trace_dir = Config::timeTracingDirectory();
-    sysTrace.reset(new TimeTracing("ssvo_trace_system", trace_dir, time_names, log_names));
+//    sysTrace.reset(new TimeTracing("ssvo_trace_system", trace_dir, time_names, log_names));
 
 
 }
 
 System::~System()
 {
-    sysTrace.reset();
+//    sysTrace.reset();
 
     viewer_->setStop();
     depth_filter_->stopMainThread();
@@ -190,6 +190,83 @@ Preintegration::Ptr System::Imu_process(vector<sensor_msgs::ImuPtr> &imus, Vecto
     pre_integration_tmp->run();
     return pre_integration_tmp;
 }
+    Preintegration::Ptr System::Imu_process(vector<ssvo::IMUData> &imus, Vector3d &ba, Vector3d &bg)
+    {
+        double last_time = -1;
+        Preintegration::Ptr pre_integration_tmp = Preintegration::creat(ba, bg);
+
+        for (auto imu:imus)
+        {
+            double t = imu._t;
+            if(last_time<0)
+                pre_integration_tmp->dt_buf.emplace_back(0);
+            else
+            {
+                double dt=t-last_time;
+                pre_integration_tmp->sum_t+=dt;
+                pre_integration_tmp->dt_buf.emplace_back(dt);
+            }
+            last_time=t;
+
+            double ax = imu._a.x();//todo 这里重传播的时候还需要检查一遍
+            double ay = imu._a.y();
+            double az = imu._a.z();
+            double gx = imu._g.x();
+            double gy = imu._g.y();
+            double gz = imu._g.z();
+            pre_integration_tmp->acc_buf.emplace_back(Vector3d(ax, ay, az));
+            pre_integration_tmp->gyr_buf.emplace_back(Vector3d(gx, gy, gz));
+        }
+        LOG_ASSERT(pre_integration_tmp->dt_buf.size()==pre_integration_tmp->acc_buf.size()) << "wrong in copy imu measurement";
+        /*
+            //todo 需要检查一下这里定义成double结果对不对
+            double t = imu->header.stamp.toSec();
+            if (last_time < 0)
+            {
+                last_time = t;
+                double ax = imu->linear_acceleration.x - ba[0];//todo 这里重传播的时候还需要检查一遍
+                double ay = imu->linear_acceleration.y - ba[1];
+                double az = imu->linear_acceleration.z - ba[2];
+                double gx = imu->angular_velocity.x - bg[0];
+                double gy = imu->angular_velocity.y - bg[1];
+                double gz = imu->angular_velocity.z - bg[2];
+                pre_integration_tmp->acc_0 = Vector3d(ax, ay, az);
+                pre_integration_tmp->gyr_0 = Vector3d(gx, gy, gz);
+                continue;
+            }
+
+            //设置时间
+            double dt = t - last_time;
+            last_time = t;
+
+            double ax = imu->linear_acceleration.x - ba[0];//todo 这里重传播的时候还需要检查一遍
+            double ay = imu->linear_acceleration.y - ba[1];
+            double az = imu->linear_acceleration.z - ba[2];
+            double gx = imu->angular_velocity.x - bg[0];
+            double gy = imu->angular_velocity.y - bg[1];
+            double gz = imu->angular_velocity.z - bg[2];
+            pre_integration_tmp->dt = dt;
+            pre_integration_tmp->sum_t += dt;
+
+            pre_integration_tmp->acc_1 = Vector3d(ax, ay, az);
+            pre_integration_tmp->gyr_1 = Vector3d(gx, gy, gz);
+            //todo 开始对预积分进行操作
+            pre_integration_tmp->run();
+            //todo 将IMU和图像对应上，需要定义frame_count,预积分
+            pre_integration_tmp->img_stamp = imus.back()->header.stamp.toSec();
+            pre_imu_txt<<fixed;
+            pre_imu_txt<<preIntegrations[frame_count]->img_stamp<<"  "<<preIntegrations[frame_count]->sum_t<<endl;
+            cout<<"p:"<<endl<<preIntegrations[frame_count]->dp<<endl;
+            cout<<"v:"<<endl<<preIntegrations[frame_count]->dv<<endl;
+            cout<<"q:"<<endl<<preIntegrations[frame_count]->dq.toRotationMatrix()<<endl;
+            pre_imu_txt<<"dp: "<<preIntegrations[frame_count]->dp(0)<<" "<<preIntegrations[frame_count]->dp(1)<<" "<<preIntegrations[frame_count]->dp(2)<<endl;
+            pre_imu_txt<<"dv: "<<preIntegrations[frame_count]->dv(0)<<" "<<preIntegrations[frame_count]->dv(1)<<" "<<preIntegrations[frame_count]->dv(2)<<endl;
+            pre_imu_txt<<"dq: "<<preIntegrations[frame_count]->dq.w()<<" "<<preIntegrations[frame_count]->dq.x()<<" "<<preIntegrations[frame_count]->dq.y()<<" "<<preIntegrations[frame_count]->dq.z()<<endl;
+            ROS_INFO("finish preintegration %d",frame_count);
+            */
+        pre_integration_tmp->run();
+        return pre_integration_tmp;
+    }
 
 void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr> &measure)
 {
@@ -280,8 +357,8 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
     //! 以上 by jh
 
 
-    sysTrace->startTimer("total");
-    sysTrace->startTimer("frame_create");
+//    sysTrace->startTimer("total");
+//    sysTrace->startTimer("frame_create");
     //! get gray image
     double t0 = (double)cv::getTickCount();
     rgb_ = image;
@@ -308,10 +385,10 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
 
     double t1 = (double)cv::getTickCount();
     LOG(WARNING) << "[System] Frame " << current_frame_->id_ << " create time: " << (t1-t0)/cv::getTickFrequency();
-    sysTrace->log("frame_id", current_frame_->id_);
-    sysTrace->stopTimer("frame_create");
+//    sysTrace->log("frame_id", current_frame_->id_);
+//    sysTrace->stopTimer("frame_create");
 
-    sysTrace->startTimer("processing");
+//    sysTrace->startTimer("processing");
     if(STAGE_NORMAL_FRAME == stage_)
     {
         status_ = tracking();
@@ -333,10 +410,158 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
 
         status_ = relocalize();
     }
-    sysTrace->stopTimer("processing");
-
+//    sysTrace->stopTimer("processing");
+//
     finishFrame();
 }
+
+    /**
+     * @brief no ros process
+     * @param measure
+     */
+    void System::process( pair< vector< ssvo::IMUData>,pair< Mat,double>> measurement)
+    {
+        cout/*<< fixed << setprecision(6)*/<< "Begin track "<<measurement.second.second<<"th frame."<<endl;
+        if(!vio_init)
+        {
+//        bool ok1=false;
+            //! jh 把用于视觉初始化之间的帧用来跟踪，计算位姿，增加关键帧的数量
+            if(initilization_frame_buffer_.size()==(secondframe_id-firstframe_id+1))
+            {
+
+                cout<<"firstframe_id"<<firstframe_id<<endl;
+                cout<<"secondframe_id"<<secondframe_id<<endl;
+                last_frame_=initilization_frame_buffer_.front();
+                KeyFrame::Ptr kf0 = mapper_->map_->getKeyFrame(0);
+                reference_keyframe_ = kf0;
+                for(auto frame:initilization_frame_buffer_)
+                {
+                    if(frame->id_!=firstframe_id&&frame->id_!=secondframe_id)
+                    {
+                        current_frame_=frame;
+                        status_=tracking();
+                        last_frame_=current_frame_;
+                    }
+                }
+                reference_keyframe_= initilization_frame_buffer_.back()->getRefKeyFrame();
+            }
+            /*
+            //check imu observibility
+            if(STAGE_NORMAL_FRAME == stage_)
+            {
+                std::deque<Frame::Ptr>::iterator frame_it;
+                Vector3d sum_g;
+                for (frame_it = initilization_frame_buffer_.begin(), frame_it++; frame_it != initilization_frame_buffer_.end(); frame_it++)
+                {
+                    double dt = (*frame_it)->preintegration->sum_t;
+                    Vector3d tmp_g = (*frame_it)->preintegration->dv / dt;
+                    sum_g += tmp_g;
+                }
+                Vector3d aver_g;
+                aver_g = sum_g * 1.0 / ((int)initilization_frame_buffer_.size() - 1);
+                double var = 0;
+                for (frame_it = initilization_frame_buffer_.begin(), frame_it++; frame_it != initilization_frame_buffer_.end(); frame_it++)
+                {
+                    double dt = (*frame_it)->preintegration->sum_t;
+                    Vector3d tmp_g = (*frame_it)->preintegration->dv / dt;
+                    var += (tmp_g - aver_g).transpose() * (tmp_g - aver_g);
+                    //cout << "frame g " << tmp_g.transpose() << endl;
+                }
+                var = sqrt(var / ((int)initilization_frame_buffer_.size() - 1));
+                //ROS_WARN("IMU variation %f!", var);
+                if(var < 0.25)
+                {
+                    ROS_INFO("IMU excitation not enouth!");
+                    ok1=false;
+                    //return false;
+                }
+                else
+                    ok1=true;
+            }
+            if( ok1&&initilization_frame_buffer_.size()>50)
+             */
+            //! 50更利于imu和相机之间的初始化 20 100的效果都不如50，但是应该会根据数据集变化， 50的话是 3.95  3.96
+            if(initilization_frame_buffer_.size()>=50)
+            {
+                vio_init = vio_process();
+
+                if(!vio_init)
+                {
+                    initilization_frame_buffer_.pop_front();
+                }
+                else
+                {
+                    viewer_->setTraScale(systemScale);
+                    mapper_->map_->applyScaleCorrect(systemScale);
+                    last_frame_ =initilization_frame_buffer_.back();
+                    cout<<"initilization_frame_buffer_.back() frame id:"<<current_frame_->id_<<endl;
+                }
+
+            }
+        }
+
+        cv::Mat image = measurement.second.first;
+        double timestamp = measurement.second.second;
+        //! 以上 by jh
+//        sysTrace->startTimer("total");
+//        sysTrace->startTimer("frame_create");
+        //! get gray image
+        double t0 = (double)cv::getTickCount();
+        rgb_ = image;
+        cv::Mat gray = image.clone();
+        if(gray.channels() == 3)
+            cv::cvtColor(gray, gray, cv::COLOR_RGB2GRAY);
+
+        Vector3d ba_last,bg_last,v_last;
+        ba_last.setZero();
+        bg_last.setZero();
+        if(last_frame_ != nullptr)
+        {
+            ba_last=last_frame_->preintegration->ba;
+            bg_last=last_frame_->preintegration->bg;
+            v_last = last_frame_->v;
+        }
+        Preintegration::Ptr preintegration_frame;
+
+        //! save imus to preintegration and send it to the frame
+        preintegration_frame = Imu_process(measurement.first,ba_last,bg_last);
+
+        current_frame_ = Frame::create(gray, timestamp, camera_, ba_last, bg_last,preintegration_frame);
+        current_frame_->v = v_last;
+
+        all_frame_buffer_.emplace_back(current_frame_);
+
+        double t1 = (double)cv::getTickCount();
+        LOG(WARNING) << "[System] Frame " << current_frame_->id_ << " create time: " << (t1-t0)/cv::getTickFrequency();
+//        sysTrace->log("frame_id", current_frame_->id_);
+//        sysTrace->stopTimer("frame_create");
+
+//        sysTrace->startTimer("processing");
+        if(STAGE_NORMAL_FRAME == stage_)
+        {
+            cout<<"INITALIZE finished ,begin tracking..."<<endl;
+            status_ = tracking();
+        }
+        else if(STAGE_INITALIZE == stage_)
+        {
+            status_ = initialize();
+        }
+        else if(STAGE_RELOCALIZING == stage_)
+        {
+            if(vio_init)
+            {
+                cout<<"STAGE_RELOCALIZING == stage_"<<endl;
+                depth_filter_->stopMainThread();
+                mapper_->stopMainThread();
+                waitKey(0);
+            }
+
+            status_ = relocalize();
+        }
+//        sysTrace->stopTimer("processing");
+
+        finishFrame();
+    }
 
 System::Status System::initialize()
 {
@@ -426,12 +651,12 @@ System::Status System::tracking()
     ///粗略估计当前帧的位姿，而不是像ORB那样很粗略
     //! alignment by SE3
     AlignSE3 align;
-    sysTrace->startTimer("img_align");
+//    sysTrace->startTimer("img_align");
     align.run(last_frame_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8);
-    sysTrace->stopTimer("img_align");
+//    sysTrace->stopTimer("img_align");
 
     //! track local map
-    sysTrace->startTimer("feature_reproj");
+//    sysTrace->startTimer("feature_reproj");
 
     //todo  here!
     int matches = feature_tracker_->reprojectLoaclMap(current_frame_);
@@ -442,8 +667,8 @@ System::Status System::tracking()
     cout<<last_frame_->featureNumber()<<endl;
     cout<<current_frame_->featureNumber()<<endl;
 
-    sysTrace->stopTimer("feature_reproj");
-    sysTrace->log("num_feature_reproj", matches);
+//    sysTrace->stopTimer("feature_reproj");
+//    sysTrace->log("num_feature_reproj", matches);
     LOG(WARNING) << "[System] Track with " << matches << " points";
 
     cout<<"matches:"<<matches<<endl;
@@ -452,14 +677,14 @@ System::Status System::tracking()
     if(matches < Config::minQualityFts())
         return STATUS_TRACKING_BAD;
     //! motion-only BA
-    sysTrace->startTimer("motion_ba");
+//    sysTrace->startTimer("motion_ba");
 
     //todo by jh 最主要的就是改这个函数了,注意使用上面的 vio_init
 //    cout<<"test 3"<<endl;
     Optimizer::motionOnlyBundleAdjustment(last_frame_,current_frame_, false ,vio_init, true, true);
-    sysTrace->stopTimer("motion_ba");
+//    sysTrace->stopTimer("motion_ba");
 
-    sysTrace->startTimer("per_depth_filter");
+//    sysTrace->startTimer("per_depth_filter");
 
     if(createNewKeyFrame(matches) )
     {
@@ -472,11 +697,11 @@ System::Status System::tracking()
     {
         depth_filter_->insertFrame(current_frame_, nullptr);
     }
-    sysTrace->stopTimer("per_depth_filter");
+//    sysTrace->stopTimer("per_depth_filter");
 
-    sysTrace->startTimer("light_affine");
+//    sysTrace->startTimer("light_affine");
     calcLightAffine();
-    sysTrace->stopTimer("light_affine");
+//    sysTrace->stopTimer("light_affine");
 
     //！ save frame pose
     frame_timestamp_buffer_.push_back(current_frame_->timestamp_);
@@ -705,7 +930,7 @@ bool System::createNewKeyFrame(int matches)
 
 void System::finishFrame()
 {
-    sysTrace->startTimer("finish");
+//    sysTrace->startTimer("finish");
     cv::Mat image_show;
 //    Stage last_stage = stage_;
     if(STAGE_NORMAL_FRAME == stage_)
@@ -739,13 +964,13 @@ void System::finishFrame()
     //! display 主要是显示轨迹用的
     viewer_->setCurrentFrame(current_frame_, image_show);
 
-    sysTrace->log("stage", stage_);
-    sysTrace->stopTimer("finish");
-    sysTrace->stopTimer("total");
-    const double time = sysTrace->getTimer("total");
+//    sysTrace->log("stage", stage_);
+//    sysTrace->stopTimer("finish");
+//    sysTrace->stopTimer("total");
+//    const double time = sysTrace->getTimer("total");
     LOG(WARNING) << "[System] Finish Current Frame with Stage: " << stage_ << ", total time: " << time;
 
-    sysTrace->writeToFile();
+//    sysTrace->writeToFile();
 
 }
 
@@ -769,7 +994,9 @@ void System::saveTrajectoryTUM(const std::string &file_name)
           << std::setprecision(9) << t[0] << " " << t[1] << " " << t[2] << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << std::endl;
     }
     f.close();
-    LOG(INFO) << " Trajectory saved!";
+
+    cout<<" Trajectory saved!";
+//    LOG(INFO) << " Trajectory saved!";
 }
 
 bool System::vio_process()
@@ -792,9 +1019,9 @@ bool System::vio_process()
         cout << " Trajectory_ssvo saved!"<<endl;
 
 
-        Vector3d GyrBais=EstimateGyrBais(initilization_frame_buffer_);
+        /*Vector3d GyrBias=*/EstimateGyrBias(initilization_frame_buffer_);
 
-//        GyrBais=EstimateGyrBais(initilization_frame_buffer_);
+//        GyrBias=EstimateGyrBias(initilization_frame_buffer_);
 
         VectorXd x;
         bool GVSSuccess=EstimateGVS(initilization_frame_buffer_,x);
@@ -834,7 +1061,7 @@ bool System::vio_process()
     f.close();
     cout << " Trajectory_imu saved!"<<endl;
          */
-        bool RefineGSuccess=RefineGravity(initilization_frame_buffer_,x);
+        /*bool RefineGSuccess = */RefineGravity(initilization_frame_buffer_,x);
 
         /*
         string file_name_new="/home/jh/trajectory_ssvo_new.txt";
