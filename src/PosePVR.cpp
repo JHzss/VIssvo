@@ -78,5 +78,42 @@ namespace ssvo
 
     }
 
+    bool PoseBias::Plus(const double *x, const double *delta, double *x_plus_delta) const
+    {
+        Eigen::Map<const Eigen::Vector3d > bg(x);
+        Eigen::Map<const Eigen::Vector3d > ba(x+3);
+
+        Eigen::Map<const Eigen::Vector3d > bg_dt(delta);
+        Eigen::Map<const Eigen::Vector3d > ba_dt(delta+3);
+
+
+//        cout<<"bias origin ------------->"<<endl<<bg<<endl<<endl<<ba<<endl;
+
+//        cout<<"bias delta ------------->"<<endl<<bg_dt<<endl<<endl<<ba_dt<<endl;
+        Eigen::Map<Eigen::Vector3d > bg_re(x_plus_delta);
+        Eigen::Map<Eigen::Vector3d > ba_re(x_plus_delta+3);
+
+        bg_re = bg + bg_dt;
+        ba_re = ba + ba_dt;
+
+//        cout<<"bias plus result ------------->"<<endl<<endl<<bg_re<<endl<<endl<<ba_re<<endl;
+
+        return true;
+    }
+
+    bool PoseBias::ComputeJacobian(const double *x, double *jacobian) const
+    {
+        Eigen::Map<Eigen::Matrix<double, 6, 6, Eigen::RowMajor>> j(jacobian);
+
+        Eigen::Matrix<double ,6,6> I6x6 = Eigen::Matrix<double ,6 ,6 >::Identity();
+
+        j=I6x6;
+
+    }
+
+
+
+
+
 
 }

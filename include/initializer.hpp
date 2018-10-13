@@ -54,8 +54,6 @@ public:
 
     Result addImage(Frame::Ptr frame_cur);
 
-    Result reAddImage(Frame::Ptr frame_cur);
-
     void reset();
 
     void reCreateInitalMap(double map_scale);

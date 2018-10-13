@@ -7,6 +7,7 @@ namespace ssvo
 {
 
 ///估计陀螺仪bias
+    //! 对比了两个数据集，基本准确！！！
 Vector3d EstimateGyrBias(deque<Frame::Ptr> &initilization_frame_buffer_)
 {
     std::deque<Frame::Ptr>::iterator iter;
@@ -26,11 +27,11 @@ Vector3d EstimateGyrBias(deque<Frame::Ptr> &initilization_frame_buffer_)
         Matrix3d Rwb_i = (*iter)->Twc().rotationMatrix()*eigen_Rb2c;
         iter++;
         //todo 下一帧的赋值，变量提取 j
-        Matrix3d jacobian_R_bg=(*iter)->preintegration->jacobian_R_bg;
-        Matrix3d delta_R_ij= (*iter)->preintegration->dR;
+        Matrix3d jacobian_R_bg = (*iter)->preintegration->jacobian_R_bg;
+        Matrix3d delta_R_ij = (*iter)->preintegration->dR;
         Matrix3d Rwb_j = (*iter)->Twc().rotationMatrix()*eigen_Rb2c;
         Matrix3d Rbw_j = Rwb_j.transpose();
-        Matrix3d R_tmp=delta_R_ij.transpose()*Rwb_i.transpose()*Rwb_j;
+        Matrix3d R_tmp = delta_R_ij.transpose()*Rwb_i.transpose()*Rwb_j;
         Sophus::SO3d so3_tmp(R_tmp);
         temp_A =jacobian_R_bg;
         temp_b =so3_tmp.log();
@@ -42,7 +43,7 @@ Vector3d EstimateGyrBias(deque<Frame::Ptr> &initilization_frame_buffer_)
 
     Vector3d delta_bg = A.ldlt().solve(b);
     cout<<"bg~~~~:"<<delta_bg.transpose()<<endl;
-    for(auto frame:initilization_frame_buffer_)
+    for(auto &frame:initilization_frame_buffer_)
     {
         ///这里注意一下bg值都得更新，因为当初没弄好，就注意一下吧
 //        frame->bg+=delta_bg;
@@ -115,6 +116,7 @@ bool EstimateGVS(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x)
     cout<<"g:"<<g.norm()<<"---:"<<g.transpose()<<endl;
     double s=(x.tail<1>())(0)/100.0;
     cout<<"scale:"<<s<<endl;
+
     /*
     for(int i=0;i<initilization_frame_buffer_.size();i++)
     {
@@ -285,7 +287,7 @@ bool RefineGravity(deque<Frame::Ptr> &initilization_frame_buffer_, VectorXd &x)
     for(int i=0;i<initilization_frame_buffer_.size();i++)
     {
         initilization_frame_buffer_[i]->v=x.segment<3>(i*3);
-        initilization_frame_buffer_[i]->s=(x.tail<1>())(0)/100;
+//        initilization_frame_buffer_[i]->s=(x.tail<1>())(0)/100;
     }
 /*
         ceres::Problem problem;

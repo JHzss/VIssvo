@@ -23,8 +23,17 @@ namespace ssvo
 
         virtual int GlobalSize() const { return 9; };
         virtual int LocalSize() const { return 9; };
+    };
 
+    class PoseBias : public ceres::LocalParameterization
+    {
+        //todo 设置成0
+        virtual bool Plus(const double *x, const double *delta, double *x_plus_delta) const;
 
+        virtual bool ComputeJacobian(const double *x, double *jacobian) const;
+
+        virtual int GlobalSize() const { return 6; };
+        virtual int LocalSize() const { return 6; };
     };
 
 

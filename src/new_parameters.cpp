@@ -9,6 +9,9 @@ double acc_n;
 double acc_w;
 double gyr_n;
 double gyr_w;
+int vio_init_frames;
+double vision_weight;
+int SlideWindow_size;
 cv::Mat Rc2b,tc2b;//Rotation from camera frame to imu frame
 Eigen::Matrix3d eigen_Rc2b;
 Eigen::Vector3d eigen_tc2b;
@@ -72,6 +75,9 @@ void LoadParameters(ros::NodeHandle &n)
     acc_w=filename["acc_w"];
     gyr_n=filename["gyr_n"];
     gyr_w=filename["gyr_w"];
+    vio_init_frames = filename["vio_init_frames"];
+    vision_weight = filename["vision_weight"];
+//    SlideWindow_size = filename["slidewindow_size"];
 
 //    number_of_features=filename["number_of_features"];
 //    init_dist=filename["init_dist"];

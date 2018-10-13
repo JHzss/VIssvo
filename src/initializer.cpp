@@ -274,10 +274,10 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
 //    if(disparities_.size() < Config::initMinTracked()) return RESET;
 
     //!BY JH 如果刚开始视差太小，视为刚开始时不动，就reset
-    if(aver<5||aver>50) return RESET;
+    if(aver<5/*||aver>50*/) return RESET;
 
     //! 如果10帧的视差的还不满足要求，就reset，越小越严格
-    if(frame_buffer_.size()>10) return RESET;
+    if(frame_buffer_.size()>20) return RESET;
 
 
     double t2 = (double)cv::getTickCount();
@@ -365,149 +365,6 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
     return SUCCESS;
 }
 
-    Initializer::Result Initializer::reAddImage(Frame::Ptr frame_cur)
-    {
-
-        //! create first candidate
-        if(frame_buffer_.empty())
-        {
-            frame_buffer_.push_back(FrameCandidate::create(frame_cur)); //当前帧作为候选帧
-            cand_ref_ = frame_buffer_.front();
-            createNewCorners(cand_ref_);///提取角点 pts
-            cand_ref_->createFts();///去除畸变 fts
-            cand_last_ = frame_buffer_.back();
-            cand_cur_ = frame_buffer_.back();
-
-            return READY;
-        }
-
-        //! finish last frame corner detect
-        cand_last_ = frame_buffer_.back();
-        int outlier_num = std::count(cand_last_->idx.begin(), cand_last_->idx.end(), -1);/// 如果上一帧的角点不足1000，则提取特征点，保证特征点的数目
-        if(outlier_num > 0)
-            createNewCorners(cand_last_);
-        //! create current candidate from last
-        cand_cur_ = FrameCandidate::create(frame_cur, cand_last_);
-        frame_buffer_.push_back(cand_cur_);
-
-
-        LOG_IF(INFO, verbose_) << "[INIT][*] Ref: " << cand_ref_->frame->id_
-                               << ", Lst: " << cand_last_->frame->id_
-                               << ", Cur: " << cand_cur_->frame->id_;
-
-
-        double t1 = (double)cv::getTickCount();
-
-        //! [1] KLT tracking
-        const bool backward_check = true;
-        cand_cur_->getInliers(inliers_); ///检测角点
-        static cv::TermCriteria termcrit(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.001);
-        utils::kltTrack(cand_last_->frame->opticalImages(), cand_cur_->frame->opticalImages(), Frame::optical_win_size_,
-                        cand_last_->pts, cand_cur_->pts, inliers_, termcrit, backward_check, true);
-        cand_cur_->updateInliers(inliers_);
-        //! if track too little corners in reference, then change reference
-        const int offset = cand_cur_->checkTracking(cand_ref_->frame->id_, cand_cur_->frame->id_, Config::initMinTracked());
-        //! return if the buffer is empty
-        changeReference(offset);
-        if(cand_ref_->frame->id_ == cand_cur_->frame->id_)
-            return READY;
-
-        cand_cur_->getMatch(inliers_, cand_ref_->frame->id_);
-        calcDisparity(cand_ref_->pts, cand_cur_->pts, inliers_, disparities_);
-        double aver=0;
-        for(auto it:disparities_)
-        {
-            aver+=it.second;
-        }
-        aver/=disparities_.size();
-        LOG_IF(INFO, verbose_) << "[INIT][1] KLT tracking points: " << disparities_.size();
-//    if(disparities_.size() < Config::initMinTracked()) return RESET;
-
-        //!BY JH 如果刚开始视差太小，视为刚开始时不动，就reset
-        if(aver<5||aver>50) return RESET;
-
-        //! 如果10帧的视差的还不满足要求，就reset，越小越严格
-        if(frame_buffer_.size()>10) return RESET;
-
-
-        double t2 = (double)cv::getTickCount();
-
-        //! [2] calculate disparities
-        std::vector<std::pair<int, float> > disparities_temp = disparities_;
-        std::sort(disparities_temp.begin(), disparities_temp.end(),
-                  [](const std::pair<int, float> &disp1, const std::pair<int, float> &disp2){return disp1.second > disp2.second;});
-        float disparity = disparities_temp.at(disparities_temp.size()/2).second;
-        //! remove outliers
-        int outliers = 0;
-        if(!backward_check)
-        {
-            float max_disparity = disparities_temp.at(disparities_temp.size() * 1 / 5).second * 2;
-            for(size_t i = 0; i < disparities_.size(); ++i)
-            {
-                if(disparities_[i].second > max_disparity)
-                {
-                    const int id = disparities_[i].first;
-                    inliers_[id] = false;
-                    cand_cur_->idx[id] = -1;
-                    outliers++;
-                }
-            }
-
-            disparity = disparities_temp.at((disparities_temp.size()-outliers)/2).second;
-            cand_cur_->updateInliers(inliers_);
-        }
-
-        LOG_IF(INFO, verbose_) << "[INIT][2] Avage disparity: " << disparity << " with outliers: " << outliers;
-        if(disparity < Config::initMinDisparity()) return FAILURE;
-
-        double t3 = (double)cv::getTickCount();
-
-        //todo jh 根据深度的方差判断是计算F矩阵还是E矩阵
-
-        //! [3] geometry check by F matrix
-        //! find fundamental matrix
-        Matrix3d E;
-        cand_cur_->createFts(); //! get undistorted points
-        bool succeed = utils::Fundamental::findFundamentalMat(cand_ref_->fts, cand_cur_->fts, E, inliers_,
-                                                              Config::imagePixelUnSigma2(), Config::initMaxRansacIters(), true);
-
-        cand_cur_->updateInliers(inliers_);
-        int inliers_count = std::count(inliers_.begin(), inliers_.end(), true);
-        LOG_IF(INFO, verbose_) << "[INIT][3] Inliers after epipolar geometry check: " << inliers_count;
-        if(!succeed || inliers_count < Config::initMinInliers()) return FAILURE;
-
-        double t4 = (double)cv::getTickCount();
-
-        //! [4] cheirality check
-        Matrix3d R1, R2;
-        Vector3d t;
-        utils::Fundamental::decomposeEssentialMat(E, R1, R2, t);
-
-        Matrix3d K = Matrix3d::Identity(3,3);
-        succeed = findBestRT(R1, R2, t, K, K, cand_ref_->fts, cand_cur_->fts, inliers_, p3ds_, T_);
-        if(!succeed) return FAILURE;
-
-        /// by jh
-        if(frame_buffer_.size()<3) return FAILURE;
-
-
-        cand_cur_->updateInliers(inliers_);
-        LOG_IF(INFO, verbose_) << "[INIT][4] Inliers after cheirality check: " << std::count(inliers_.begin(), inliers_.end(), true);
-
-        double t5 = (double)cv::getTickCount();
-
-        //! [5] reprojective check
-        inliers_count = checkReprejectErr(cand_ref_->pts, cand_cur_->pts, cand_ref_->fts, cand_cur_->fts, T_, inliers_, p3ds_,
-                                          Config::imagePixelUnSigma2()*4);
-        cand_cur_->updateInliers(inliers_);
-        LOG_IF(INFO, verbose_) << "[INIT][5] Inliers after reprojective check: " << inliers_count;
-        if(inliers_count < Config::initMinInliers()) return FAILURE;
-
-
-        finished_ = true;
-
-        return SUCCESS;
-    }
 
 void Initializer::createInitalMap(double map_scale)
 {

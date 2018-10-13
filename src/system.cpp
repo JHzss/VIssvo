@@ -329,7 +329,7 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
         if( ok1&&initilization_frame_buffer_.size()>50)
          */
         //! 50更利于imu和相机之间的初始化 20 100的效果都不如50，但是应该会根据数据集变化， 50的话是 3.95  3.96
-        if(initilization_frame_buffer_.size()>=50)
+        if(initilization_frame_buffer_.size()>=vio_init_frames)
         {
             vio_init = vio_process();
 
@@ -368,6 +368,7 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
 
     Vector3d ba_last,bg_last,v_last;
     ba_last.setZero();
+    ba_last = Vector3d( -0.04,0.18,0.05);
     bg_last.setZero();
     if(last_frame_ != nullptr)
     {
@@ -481,7 +482,7 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
             if( ok1&&initilization_frame_buffer_.size()>50)
              */
             //! 50更利于imu和相机之间的初始化 20 100的效果都不如50，但是应该会根据数据集变化， 50的话是 3.95  3.96
-            if(initilization_frame_buffer_.size()>=50)
+            if(initilization_frame_buffer_.size()>=100)
             {
                 vio_init = vio_process();
 
@@ -514,6 +515,7 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
 
         Vector3d ba_last,bg_last,v_last;
         ba_last.setZero();
+        ba_last = Vector3d(-0.04,0.18,0.05);
         bg_last.setZero();
         if(last_frame_ != nullptr)
         {
@@ -659,6 +661,7 @@ System::Status System::tracking()
 //    sysTrace->startTimer("feature_reproj");
 
     //todo  here!
+    //! 局部地图跟踪
     int matches = feature_tracker_->reprojectLoaclMap(current_frame_);
 
 
@@ -703,10 +706,16 @@ System::Status System::tracking()
     calcLightAffine();
 //    sysTrace->stopTimer("light_affine");
 
-    //！ save frame pose
-    frame_timestamp_buffer_.push_back(current_frame_->timestamp_);
-    reference_keyframe_buffer_.push_back(current_frame_->getRefKeyFrame());
-    frame_pose_buffer_.push_back(current_frame_->pose());//current_frame_->getRefKeyFrame()->Tcw() * current_frame_->pose());
+    //! save frame pose
+    if(vio_init)
+    {
+        frame_timestamp_buffer_.push_back(current_frame_->timestamp_);
+        reference_keyframe_buffer_.push_back(current_frame_->getRefKeyFrame());
+        frame_pose_buffer_.push_back(current_frame_->pose());//current_frame_->getRefKeyFrame()->Tcw() * current_frame_->pose());
+        frame_ba_buffer_.push_back(current_frame_->preintegration->ba);
+        frame_bg_buffer_.push_back(current_frame_->preintegration->bg);
+    }
+
 
     if(!vio_init&&current_frame_->id_>secondframe_id)initilization_frame_buffer_.emplace_back(current_frame_);
 
@@ -894,7 +903,7 @@ bool System::createNewKeyFrame(int matches)
 
     //! create new keyFrame
     //! 这里好像没有什么用
-    if(c1 && (c2 || c3 )/* || (cjh && !vio_init) || matches < 150*/)
+    if(c1 && (c2 || c3 )/* || (cjh && !vio_init)  || matches < 150*/)
     {
         //! create new keyframe
         KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
@@ -976,15 +985,30 @@ void System::finishFrame()
 
 void System::saveTrajectoryTUM(const std::string &file_name)
 {
+    std::string ba_file_name = "/home/jh/ba.txt";
+    std::string bg_file_name = "/home/jh/bg.txt";
+
+    std::ofstream f_ba;
+    f_ba.open(ba_file_name.c_str());
+    f_ba << std::fixed;
+
+    std::ofstream f_bg;
+    f_bg.open(bg_file_name.c_str());
+    f_bg << std::fixed;
+
+
     std::ofstream f;
     f.open(file_name.c_str());
     f << std::fixed;
+
+    std::list<Vector3d>::iterator ba_ptr = frame_ba_buffer_.begin();
+    std::list<Vector3d>::iterator bg_ptr = frame_bg_buffer_.begin();
 
     std::list<double>::iterator frame_timestamp_ptr = frame_timestamp_buffer_.begin();
     std::list<Sophus::SE3d>::iterator frame_pose_ptr = frame_pose_buffer_.begin();
     std::list<KeyFrame::Ptr>::iterator reference_keyframe_ptr = reference_keyframe_buffer_.begin();
     const std::list<double>::iterator frame_timestamp = frame_timestamp_buffer_.end();
-    for(; frame_timestamp_ptr!= frame_timestamp; frame_timestamp_ptr++, frame_pose_ptr++, reference_keyframe_ptr++)
+    for(; frame_timestamp_ptr!= frame_timestamp; frame_timestamp_ptr++, frame_pose_ptr++, reference_keyframe_ptr++, ba_ptr++, bg_ptr++)
     {
         Sophus::SE3d frame_pose = (*frame_pose_ptr);//(*reference_keyframe_ptr)->Twc() * (*frame_pose_ptr);
         Vector3d t = frame_pose.translation();
@@ -992,10 +1016,16 @@ void System::saveTrajectoryTUM(const std::string &file_name)
 
         f << std::setprecision(6) << *frame_timestamp_ptr << " "
           << std::setprecision(9) << t[0] << " " << t[1] << " " << t[2] << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << std::endl;
+
+        f_ba<< std::setprecision(6) << (*ba_ptr).x() <<" "<< (*ba_ptr).y() <<" " <<(*ba_ptr).z() <<std::endl;
+        f_bg<< std::setprecision(6) << (*bg_ptr).x() <<" "<< (*bg_ptr).y() <<" " <<(*bg_ptr).z() <<std::endl;
     }
     f.close();
+    f_ba.close();
+    f_bg.close();
 
     cout<<" Trajectory saved!";
+    cout<<"init imu-vision scale: "<<systemScale<<endl;
 //    LOG(INFO) << " Trajectory saved!";
 }
 
@@ -1088,44 +1118,23 @@ bool System::vio_process()
         systemScale=(x.tail<1>())(0)/100;
 //        systemScale = 1;
 
-
 //    waitKey(0);
 
         for(auto &frame:initilization_frame_buffer_)
         {
 
-                frame->optimal_Tcw_=frame->Tcw();
-                frame->optimal_Tcw_.translation() *= systemScale;
-                frame->setTcw(frame->optimal_Tcw_);
+            frame->optimal_Tcw_=frame->Tcw();
+            frame->optimal_Tcw_.translation() *= systemScale;
+            frame->setTcw(frame->optimal_Tcw_);
 
-            /*
-//            MapPoints mpts;
-//            frame->getMapPoints(mpts);
-//
-//            for(auto &mpt : mpts)
-//            {
-//                if(find(ids_mp.begin(),ids_mp.end(),mpt->id_)==ids_mp.end())
-//                {
-//                    mpt->setPose((mpt->pose())*scale);
-//                    mpt->correctscale(scale);
-//                    ids_mp.push_back(mpt->id_);
-//
-//                    KeyFrame::Ptr kf=mpt->getReferenceKeyFrame();
-//                    if(find(ids.begin(),ids.end(),kf->id_)==ids.end())
-//                    {
-//                        kf->optimal_Tcw_=kf->Tcw();
-//                        kf->optimal_Tcw_.translation()*=scale;
-//                        kf->setTcw(kf->optimal_Tcw_);
-//                        ids.push_back(kf->id_);
-//                    }
-//                }
-//            }
-             */
-//            frame->removeAllSeed();
+            frame->removeAllSeed();
+
+            frame_timestamp_buffer_.push_back(frame->timestamp_);
+            reference_keyframe_buffer_.push_back(frame->getRefKeyFrame());
+            frame_pose_buffer_.push_back(frame->pose());//current_frame_->getRefKeyFrame()->Tcw() * current_frame_->pose());
+            frame_ba_buffer_.push_back(frame->preintegration->ba);
+            frame_bg_buffer_.push_back(frame->preintegration->bg);
         }
-
-
-
 
         return true;
     }

@@ -109,20 +109,28 @@ namespace ssvo {
                          return Jr;// = Matrix3d::Identity();
                     }
                  */
+
+                Jr = Matrix3d::Identity();
                 double theta=w.norm();
-                Matrix3d w_skew=skew(w);
+//                Matrix3d w_skew=skew(w);
                 if(theta<0.00001)
                 {
                     Jr=Matrix3d::Identity();
-                    Jr_inv=Matrix3d::Identity();
+//                    Jr_inv=Matrix3d::Identity();
                 } else
                 {
-                    Jr=Matrix3d::Identity()
-                       -(1-cos(theta))/(theta*theta)*w_skew
-                       +(theta-sin(theta))/(theta*theta*theta)*w_skew*w_skew;
-                    Jr_inv=Matrix3d::Identity()
-                           +0.5*w_skew
-                           +(1/(theta*theta)-(1+cos(theta))/(0.5*theta*sin(theta)))*w_skew*w_skew;//SVO的作者公式计算有点问题，查资料看王京写的改正了。
+
+                    Vector3d k = w.normalized();  // k - unit direction vector of w
+                    Matrix3d K = skew(k);
+                    Jr =   Matrix3d::Identity()
+                           - (1-cos(theta))/theta*K
+                           + (1-sin(theta)/theta)*K*K;
+//                    Jr=Matrix3d::Identity()
+//                       -(1-cos(theta))/(theta*theta)*w_skew
+//                       +(theta-sin(theta))/(theta*theta*theta)*w_skew*w_skew;
+//                    Jr_inv=Matrix3d::Identity()
+//                           +0.5*w_skew
+//                           +(1/(theta*theta)-(1+cos(theta))/(0.5*theta*sin(theta)))*w_skew*w_skew;//SVO的作者公式计算有点问题，查资料看王京写的改正了。
                 }
 
             ///角度太小了？罗德里格斯公式不可以直接用？

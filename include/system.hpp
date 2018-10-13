@@ -109,6 +109,8 @@ private:
 
     double time_;
 
+        std::list<Vector3d > frame_ba_buffer_;
+        std::list<Vector3d > frame_bg_buffer_;
     std::list<double > frame_timestamp_buffer_;
     std::list<Sophus::SE3d> frame_pose_buffer_;
     std::list<KeyFrame::Ptr> reference_keyframe_buffer_;
@@ -145,6 +147,11 @@ private:
         }
 
         bool filescale;
+
+        //! slide window
+        double bias_window[10][6];
+        double pvr_window[10][9];
+        double feature_window[1000][3];
 
 };
 

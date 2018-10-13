@@ -14,6 +14,10 @@ extern Eigen::Matrix3d eigen_Rc2b;
 extern Eigen::Vector3d eigen_tc2b;
 extern Eigen::Vector3d G;
 
+extern int vio_init_frames;
+extern double vision_weight;
+extern int SlideWindow_size;
+
 extern SE3d Tc2b;
 
 void LoadParameters(ros::NodeHandle &n);

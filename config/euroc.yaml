@@ -60,6 +60,9 @@ Initializer.min_disparity: 30
 Initializer.sigma: 1.0
 Initializer.ransac_max_iters: 1000
 
+vio_init_frames: 100
+vision_weight: 1.0
+
 # Map
 Mapping.scale: 1
 Mapping.min_connection_observations: 5 # min shared fts in connected kfs
@@ -78,6 +81,8 @@ Tracking.max_local_kfs: 10
 Tracking.min_quality_fts: 5
 Tracking.max_quality_drop_fts: 40
 
+
+
 # DepthFilter
 DepthFilter.max_perprocess_kfs: 3
 DepthFilter.max_seeds_buffer: 20
@@ -95,3 +100,6 @@ Trace.log_dir: "/tmp"
 
 # DBoW
 DBoW.voc_dir: ""
+
+# slidewindow
+slidewindow_size: 10

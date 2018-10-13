@@ -32,12 +32,21 @@ namespace ssvo {
         {
 //            Matrix3d Rwb_i=Qwb_i.toRotationMatrix();
 //            Matrix3d Rwb_j=Qwb_j.toRotationMatrix();
+//            cout<<"Pi: "<<Pi.transpose()<<endl;
+//            cout<<"Vi: "<<Vi.transpose()<<endl;
+//            cout<<"Bai: "<<Bai.transpose()<<endl;
+//            cout<<"Bgi: "<<Bgi.transpose()<<endl;
+//            cout<<"Pj: "<<Pj.transpose()<<endl;
+//            cout<<"Vj: "<<Vj.transpose()<<endl;
+//            cout<<"Baj: "<<Baj.transpose()<<endl;
+//            cout<<"Bgj: "<<Bgj.transpose()<<endl;
+            
             Eigen::Matrix<double, 9, 1> residuals;
 
             Eigen::Vector3d dba = Bai - ba_tmp;//ba_j 的ba_tmp 就是bi的初始值
             Eigen::Vector3d dbg = Bgi - bg_tmp;
 
-            cout<<"dba: "<<endl<<dba<<endl<<"dbg:   "<<endl<<dbg<<endl;
+//            cout<<"dba: "<<endl<<dba<<endl<<"dbg:   "<<endl<<dbg<<endl;
 
             //! exp(Jr*delta bg)
             Matrix3d deltaR_wt_eigen;
@@ -45,7 +54,7 @@ namespace ssvo {
             w = jacobian_R_bg * dbg;
 
             deltaR_wt_eigen = Sophus_new::SO3::exp(w).matrix();
-            cout<<"deltaR_wt_eigen: "<<endl<<deltaR_wt_eigen<<endl;
+//            cout<<"deltaR_wt_eigen: "<<endl<<deltaR_wt_eigen<<endl;
 
             Eigen::Matrix3d corrected_delta_R = dR * deltaR_wt_eigen;
             Eigen::Vector3d corrected_delta_v = dv + jacobian_V_ba * dba + jacobian_V_bg * dbg;

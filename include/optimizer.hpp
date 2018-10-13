@@ -13,7 +13,6 @@
 #include "preintegration.h"
 #include "utility.h"
 
-
 namespace ssvo {
 
 class Optimizer: public noncopyable
@@ -134,14 +133,16 @@ public:
         residuals[0] = predicted_x - observed_x_;
         residuals[1] = predicted_y - observed_y_;
 
-//        cout<<"residuals[0]:"<<residuals[0]<<endl;
-//        cout<<"residuals[1]:"<<residuals[1]<<endl;
+
 
         residuals[0] *= weight_;
         residuals[1] *= weight_;
 
+//        cout<<"residuals[0]:"<<residuals[0]<<endl;
+//        cout<<"residuals[1]:"<<residuals[1]<<endl;
+
 //        cout<<"residul  pose----------------->"<<endl<<residuals[0]<<" "<<residuals[1]<<endl;
-//        cout<<"vision sqrt_info residual:"<<endl<<residuals<<endl;
+        cout<<"ssvo vision residual: "<<residuals[0]*residuals[0]+residuals[1]*residuals[1]<<endl;
 
         if(!jacobians) return true;
         double* jacobian0 = jacobians[0];
@@ -183,7 +184,7 @@ public:
         return true;
     }
 
-    static inline ceres::CostFunction *Create(const double observed_x, const double observed_y, const double weight = 460/1.5) {
+    static inline ceres::CostFunction *Create(const double observed_x, const double observed_y, const double weight = 460.0) {
         return (new ReprojectionErrorSE3(observed_x, observed_y, weight));
     }
 
@@ -429,15 +430,13 @@ private:
     };
 
 
-    class IMUError: public ceres::SizedCostFunction<9,9,6,9>
+    class IMUError: public ceres::SizedCostFunction<9,9,6,9,6>
     {
     public:
         IMUError(const Frame::Ptr &last_frame, const Frame::Ptr &cur_frame):last_frame_(last_frame),cur_frame_(cur_frame),preintegration_(cur_frame->preintegration)
         {}
         virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
         {
-
-
             Eigen::Map<const Eigen::Vector3d> Pi(parameters[0]);
             Eigen::Map<const Eigen::Vector3d> Vi(parameters[0]+3);
             Eigen::Map<const Eigen::Vector3d> PHIi(parameters[0]+6);
@@ -449,8 +448,8 @@ private:
             Eigen::Map<const Eigen::Vector3d> Vj(parameters[2]+3);
             Eigen::Map<const Eigen::Vector3d> PHIj(parameters[2]+6);
 
-            Eigen::Vector3d Baj = cur_frame_->preintegration->ba;
-            Eigen::Vector3d Bgj = cur_frame_->preintegration->bg;
+            Eigen::Map<const Eigen::Vector3d> Bgj(parameters[3]);
+            Eigen::Map<const Eigen::Vector3d> Baj(parameters[3]+3);
 
             Eigen::Matrix3d Ri = Sophus::SO3d::exp(PHIi).matrix();
             Eigen::Matrix3d Rj = Sophus::SO3d::exp(PHIj).matrix();
@@ -491,6 +490,7 @@ private:
 
 
 //            cout<<"ssvo imu sqrt_info residual:"<<endl<<residual<<endl;
+            cout<<"ssvo imu  residual:"<<endl<<residual.transpose()*residual<<endl;
 
             if (jacobians)
             {
@@ -553,6 +553,11 @@ private:
 //                    ROS_ASSERT(fabs(jacobian_pose_j.minCoeff()) < 1e8);
 //                    cout<<"sqrt jacobian_pose_j: "<<endl<<jacobian_pose_j<<endl;
                 }
+                if (jacobians[3])
+                {
+                    Eigen::Map<Eigen::Matrix<double, 9, 6, Eigen::RowMajor>> jacobian_speedbias_j(jacobians[3]);
+                    jacobian_speedbias_j.setZero();
+                }
 
                 //! check
                 /*
@@ -574,6 +579,9 @@ private:
                     Eigen::Matrix<double, 9, 1> residual_dt = preintegration_->evaluate(Pi, Ri, Vi, Bai, Bgi,
                                                                                         Pj + turb_p, Rj_turb, Vj + turb_v,
                                                                                         Baj, Bgj);
+                    Eigen::Matrix<double, 9, 9> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 9, 9>>(preintegration_->covariance.inverse()).matrixL().transpose();
+                    residual_dt = sqrt_info * residual_dt;
+
                     cout << "jacobian_pose_j----------: " << endl << jacobian_pose_j_ << endl;
 
                     cout << "original residual----------------->" << endl << residual << endl;
@@ -603,6 +611,9 @@ private:
                     Eigen::Matrix<double, 9, 1> residual_dt = preintegration_->evaluate(Pi, Ri, Vi, Bai + turb_ba,
                                                                                         Bgi + turb_bg,
                                                                                         Pj, Rj, Vj, Baj, Bgj);
+                    Eigen::Matrix<double, 9, 9> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 9, 9>>(preintegration_->covariance.inverse()).matrixL().transpose();
+                    residual_dt = sqrt_info * residual_dt;
+
                     cout << "jacobian_speedbias_i----------: " << endl << jacobian_speedbias_i << endl;
 
                     cout << "original residual_dt----------------->" << endl << residual_dt << endl;
@@ -610,7 +621,6 @@ private:
                     cout << "yanzheng bias:" << endl << (residual_dt - residual - jacobian_speedbias_i * turb) << endl;
                 }
                  */
-
             }
 
             return true;
@@ -628,31 +638,28 @@ private:
         {}
         virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
         {
-
             Eigen::Map<const Eigen::Matrix<double,6,1>> Bias_i(parameters[0]);
             Eigen::Map<const Eigen::Matrix<double,6,1>> Bias_j(parameters[1]);
 
             Eigen::Map<Eigen::Matrix<double, 6, 1>> residual(residuals);
-            residual = Bias_j-Bias_i;
+//            cout<<"Bias_i:"<<endl<<Bias_i<<endl;
+//            cout<<"Bias_j:"<<endl<<Bias_j<<endl;
+            residual = Bias_j - Bias_i;
 
 //            cout<<"ssvo bias original residual----------------->"<<endl<<residual<<endl;
-
             Matrix<double,6,6> InvCovBgaRW = Matrix<double,6,6>::Identity();
             InvCovBgaRW.topLeftCorner(3,3) = Matrix3d::Identity()/IMUData::getGyrBiasRW2();       // Gyroscope bias random walk, covariance INVERSE
             InvCovBgaRW.bottomRightCorner(3,3) = Matrix3d::Identity()/IMUData::getAccBiasRW2();   // Accelerometer bias random walk, covariance INVERSE
 
 //            cout<<"bias information matrix:"<<endl<<InvCovBgaRW/preintegration_->sum_t<<endl;
-
             Eigen::Matrix<double, 6, 6> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 6, 6>>(InvCovBgaRW/preintegration_->sum_t).matrixL().transpose();
             residual = sqrt_info * residual;
 
 //            cout<<"ssvo bias sqrt_info residual:"<<endl<<residual<<endl;
+//            cout<<"ssvo  residual:"<<endl<<residual.transpose()*residual<<endl;
 
-
-            //todo 
             if (jacobians)
             {
-
                 if (jacobians[0])
                 {
                     Eigen::Map<Eigen::Matrix<double, 6, 6>> jacobian_bias_i(jacobians[0]);
