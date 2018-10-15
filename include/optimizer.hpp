@@ -33,6 +33,10 @@ public:
     static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
 
     static void reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report=false, bool verbose=false);
+
+
+
+    static void slideWindowJointOptimization(vector<Frame::Ptr> &all_frame_buffer);
 };
 
 namespace ceres_slover {
@@ -142,7 +146,7 @@ public:
 //        cout<<"residuals[1]:"<<residuals[1]<<endl;
 
 //        cout<<"residul  pose----------------->"<<endl<<residuals[0]<<" "<<residuals[1]<<endl;
-        cout<<"ssvo vision residual: "<<residuals[0]*residuals[0]+residuals[1]*residuals[1]<<endl;
+//        cout<<"ssvo vision residual: "<<residuals[0]*residuals[0]+residuals[1]*residuals[1]<<endl;
 
         if(!jacobians) return true;
         double* jacobian0 = jacobians[0];

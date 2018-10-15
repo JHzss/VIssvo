@@ -16,7 +16,8 @@ std::string Config::FileName;
 
 System::System(std::string config_file) :
     stage_(STAGE_INITALIZE), status_(STATUS_INITAL_RESET),
-    last_frame_(nullptr), current_frame_(nullptr), reference_keyframe_(nullptr),firstframe_id(-1),vio_init(false),RT_success(false),correctScale(false),filescale(false)
+    last_frame_(nullptr), current_frame_(nullptr), reference_keyframe_(nullptr),firstframe_id(-1),vio_init(false),RT_success(false),correctScale(false),filescale(false),
+    frame_num_in_window(0)
 {
     systemScale = -1.0;
     LOG_ASSERT(!config_file.empty()) << "Empty Config file input!!!";
@@ -628,83 +629,84 @@ System::Status System::initialize()
 
 System::Status System::tracking()
 {
-    //! jh 输出
-    /*
-    cout<<"last_frame_ id "<<last_frame_->id_<<endl;
-    cout<<"current_frame_ id "<<current_frame_->id_<<endl;
-    cout<<"reference_keyframe_ id "<<reference_keyframe_->frame_id_<<endl;
-    cout<<"last_frame_ pose "<<(last_frame_->pose()).rotationMatrix()<<endl;
-    cout<<"current_frame_ pose "<<(current_frame_->pose()).rotationMatrix()<<endl;
-     */
-
 
     current_frame_->setRefKeyFrame(reference_keyframe_);
 
-
     //! track seeds
-
-    //todo 没有种子点怎么办?
     depth_filter_->trackFrame(last_frame_, current_frame_);//追踪上一帧的种子点，添加当前帧的种子点
 
-    // TODO 先验信息怎么设置？
 
+    // TODO 先验信息可以根据上一帧的运动状态设置，而不是单纯设置成上一帧的位姿
     current_frame_->setPose(last_frame_->pose());
 
     ///粗略估计当前帧的位姿，而不是像ORB那样很粗略
     //! alignment by SE3
     AlignSE3 align;
-//    sysTrace->startTimer("img_align");
+    sysTrace->startTimer("img_align");
     align.run(last_frame_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8);
-//    sysTrace->stopTimer("img_align");
+    sysTrace->stopTimer("img_align");
 
     //! track local map
-//    sysTrace->startTimer("feature_reproj");
-
-    //todo  here!
-    //! 局部地图跟踪
+    sysTrace->startTimer("feature_reproj");
     int matches = feature_tracker_->reprojectLoaclMap(current_frame_);
-
-
     cout<<"---------------------------------------- matches when tracking -------------------------------------"<<endl;
-
-    cout<<last_frame_->featureNumber()<<endl;
-    cout<<current_frame_->featureNumber()<<endl;
-
-//    sysTrace->stopTimer("feature_reproj");
-//    sysTrace->log("num_feature_reproj", matches);
+    sysTrace->stopTimer("feature_reproj");
+    sysTrace->log("num_feature_reproj", matches);
     LOG(WARNING) << "[System] Track with " << matches << " points";
-
     cout<<"matches:"<<matches<<endl;
 
     // TODO tracking status
     if(matches < Config::minQualityFts())
         return STATUS_TRACKING_BAD;
+
+
     //! motion-only BA
-//    sysTrace->startTimer("motion_ba");
-
+    sysTrace->startTimer("motion_ba");
     //todo by jh 最主要的就是改这个函数了,注意使用上面的 vio_init
-//    cout<<"test 3"<<endl;
     Optimizer::motionOnlyBundleAdjustment(last_frame_,current_frame_, false ,vio_init, true, true);
-//    sysTrace->stopTimer("motion_ba");
+    sysTrace->stopTimer("motion_ba");
 
-//    sysTrace->startTimer("per_depth_filter");
+    //todo 向滑窗中加入状态
 
+    frame_num_in_window ++;
+
+
+    //! 如果vio初始化完成，就联合优化，否则认为是还没有足够的帧用来初始化，则向slide window中插入当前帧
+    if(vio_init)
+    {
+        sysTrace->startTimer("slide window optimization");
+        Optimizer::slideWindowJointOptimization(all_frame_buffer_);
+        sysTrace->stopTimer("slide window optimization");
+    }
+
+    //todo 该帧插入到滑窗中
+
+    sysTrace->startTimer("per_depth_filter");
     if(createNewKeyFrame(matches) )
     {
-
+        slideWindowFlag = Slide_old;
         depth_filter_->insertFrame(current_frame_, reference_keyframe_);
-
         mapper_->insertKeyFrame(reference_keyframe_);
+
+        //! 如果window中的frame大于10再slidewindow，否则不进行slidewindow，直接插入
+        if(frame_num_in_window==10)
+        {
+            slideWindow();
+            frame_num_in_window --;
+        }
+
     }
     else
     {
+        slideWindowFlag = Slide_new;
         depth_filter_->insertFrame(current_frame_, nullptr);
+        slideWindow();
+        frame_num_in_window --;
     }
-//    sysTrace->stopTimer("per_depth_filter");
-
-//    sysTrace->startTimer("light_affine");
+    sysTrace->stopTimer("per_depth_filter");
+    sysTrace->startTimer("light_affine");
     calcLightAffine();
-//    sysTrace->stopTimer("light_affine");
+    sysTrace->stopTimer("light_affine");
 
     //! save frame pose
     if(vio_init)
@@ -719,7 +721,7 @@ System::Status System::tracking()
 
     if(!vio_init&&current_frame_->id_>secondframe_id)initilization_frame_buffer_.emplace_back(current_frame_);
 
-//    waitKey(0);
+
 
     return STATUS_TRACKING_GOOD;
 }
@@ -1138,6 +1140,29 @@ bool System::vio_process()
 
         return true;
     }
+
+void System::slideWindow()
+{
+    if(slideWindowFlag == Slide_old)
+    {
+        int max_id = frame_num_in_window - 1;
+        for(int i = 0;i < max_id;i++)
+        {
+            p_window[i] = p_window[i+1];
+            v_window[i] = v_window[i+1];
+            r_window[i] = r_window[i+1];
+            ba_window[i] = ba_window[i+1];
+            bg_window[i] = bg_window[i+1];
+        }
+
+    }
+    else
+    {
+
+    }
+
+
+}
 
 }
 

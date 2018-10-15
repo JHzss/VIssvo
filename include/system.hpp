@@ -33,6 +33,11 @@ public:
         STATUS_TRACKING_GOOD,
     };
 
+    enum SlideWindowFlag{
+        Slide_old = 0,
+        Slide_new = 1
+    };
+
     System(std::string config_file);
 
     void saveTrajectoryTUM(const std::string &file_name);
@@ -75,6 +80,8 @@ private:
 
     //! jh
     bool vio_process();
+
+    void slideWindow();
 
 //    bool SFM();
 
@@ -149,9 +156,24 @@ private:
         bool filescale;
 
         //! slide window
-        double bias_window[10][6];
-        double pvr_window[10][9];
-        double feature_window[1000][3];
+
+        SlideWindowFlag slideWindowFlag;
+        double bias_window[11][6];
+        double pvr_window[11][9];
+        double feature_window[1001][3];
+
+        Vector3d p_window[11];
+        Vector3d v_window[11];
+        Vector3d r_window[11];
+        Vector3d ba_window[11];
+        Vector3d bg_window[11];
+
+        int frame_id_window[11];
+
+        int frame_num_in_window;
+
+        Preintegration::Ptr preintergration[11];
+
 
 };
 

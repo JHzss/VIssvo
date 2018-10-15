@@ -532,28 +532,27 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
     ceres::Solver::Options options;
     ceres::Solver::Summary summary;
     options.linear_solver_type = ceres::DENSE_SCHUR;
-//    options.trust_region_strategy_type = ceres::DOGLEG;
     options.minimizer_progress_to_stdout = report & verbose;
     options.max_linear_solver_iterations = 20;
 
     ceres::Solve(options, &problem, &summary);
 
 
-//        double sum=0;
-//        int l=0;
-//        std::vector<ceres::ResidualBlockId> ids;
-//        problem.GetResidualBlocks(&ids);
-//        for (auto & id: ids)
-//        {
-//            cout<<l<<":   ";
-//            sum += reprojectionError(problem, id).transpose() * reprojectionError(problem, id);
-//            cout<<reprojectionError(problem, id).transpose() * reprojectionError(problem, id)<<endl;
-//            l++;
-//        }
-//
-//    cout<<"sum: "<<sum<<endl;
-//    cout<<"视觉误差量个数："<<N<<endl;
-//    cout << summary.FullReport() << endl;
+        double sum=0;
+        int l=0;
+        std::vector<ceres::ResidualBlockId> ids;
+        problem.GetResidualBlocks(&ids);
+        for (auto & id: res_ids)
+        {
+            cout<<l<<":   ";
+            sum += reprojectionError(problem, id).transpose() * reprojectionError(problem, id);
+            cout<<reprojectionError(problem, id).transpose() * reprojectionError(problem, id)<<endl;
+            l++;
+        }
+
+    cout<<"sum: "<<sum<<endl;
+    cout<<"视觉误差量个数："<<N<<endl;
+    cout << summary.FullReport() << endl;
 //    ROS_DEBUG("Iterations : %d", static_cast<int>(summary.iterations.size()));
 //        waitKey(0);
         
@@ -597,6 +596,8 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 
         last_frame->preintegration->bg = Eigen::Vector3d(bias_i[0],bias_i[1],bias_i[2]);
         last_frame->preintegration->ba = Eigen::Vector3d(bias_i[3],bias_i[4],bias_i[5]);
+        memcpy(last_frame->bgba,bias_i,6);
+        memcpy(frame->bgba,bias_j,6);
 
         frame->preintegration->bg = last_frame->preintegration->bg;
         frame->preintegration->ba = last_frame->preintegration->ba;
@@ -606,46 +607,46 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
     //! Report
 //    reportInfo(problem, summary, report, verbose);
 
-        double sum=0;
-        int l=0;
-        std::vector<ceres::ResidualBlockId> ids;
-        problem.GetResidualBlocks(&ids);
-
-        std::vector<ceres::ResidualBlockId>::iterator iter;
-        for (iter=ids.begin()+1;iter!=ids.end();iter++)
-        {
-            problem.RemoveResidualBlock(*iter);
-        }
-
-        std::vector<ceres::ResidualBlockId> ids2;
-        problem.GetResidualBlocks(&ids2);
-        for (auto & id: ids2)
-        {
-            cout<<l<<":   ";
-            sum += reprojectionError(problem, id).transpose() * reprojectionError(problem, id);
-            cout<<reprojectionError(problem, id).transpose() * reprojectionError(problem, id)<<endl;
-            l++;
-        }
-
-        cout<<"init sum: "<<sum<<endl;
-
-
-        ceres::Solve(options, &problem, &summary);
-
-        sum = 0; l = 0;
-        std::vector<ceres::ResidualBlockId> ids1;
-        problem.GetResidualBlocks(&ids1);
-        for (auto & id: ids1)
-        {
-            cout<<l<<":   ";
-            sum += reprojectionError(problem, id).transpose() * reprojectionError(problem, id);
-            cout<<reprojectionError(problem, id).transpose() * reprojectionError(problem, id)<<endl;
-            l++;
-        }
-
-        cout<<"sum: "<<sum<<endl;
-//        cout<<"视觉误差量个数："<<N<<endl;
-        cout << summary.FullReport() << endl;
+//        double sum=0;
+//        int l=0;
+//        std::vector<ceres::ResidualBlockId> ids;
+//        problem.GetResidualBlocks(&ids);
+//
+//        std::vector<ceres::ResidualBlockId>::iterator iter;
+//        for (iter=ids.begin()+1;iter!=ids.end();iter++)
+//        {
+//            problem.RemoveResidualBlock(*iter);
+//        }
+//
+//        std::vector<ceres::ResidualBlockId> ids2;
+//        problem.GetResidualBlocks(&ids2);
+//        for (auto & id: ids2)
+//        {
+//            cout<<l<<":   ";
+//            sum += reprojectionError(problem, id).transpose() * reprojectionError(problem, id);
+//            cout<<reprojectionError(problem, id).transpose() * reprojectionError(problem, id)<<endl;
+//            l++;
+//        }
+//
+//        cout<<"init sum: "<<sum<<endl;
+//
+//
+//        ceres::Solve(options, &problem, &summary);
+//
+//        sum = 0; l = 0;
+//        std::vector<ceres::ResidualBlockId> ids1;
+//        problem.GetResidualBlocks(&ids1);
+//        for (auto & id: ids1)
+//        {
+//            cout<<l<<":   ";
+//            sum += reprojectionError(problem, id).transpose() * reprojectionError(problem, id);
+//            cout<<reprojectionError(problem, id).transpose() * reprojectionError(problem, id)<<endl;
+//            l++;
+//        }
+//
+//        cout<<"sum: "<<sum<<endl;
+////        cout<<"视觉误差量个数："<<N<<endl;
+//        cout << summary.FullReport() << endl;
 
 
 
@@ -800,6 +801,86 @@ void Optimizer::reportInfo(const ceres::Problem &problem, const ceres::Solver::S
             LOG(INFO) << "BlockId: " << std::setw(5) << i <<" residual(RMSE): " << reprojectionError(problem, ids[i]).norm();
         }
     }
+}
+
+
+void Optimizer::slideWindowJointOptimization(vector<Frame::Ptr> &all_frame_buffer)
+{
+    ceres::Problem problem;
+    ceres::LossFunction *lossFunction;
+
+    //todo 理解不同的鲁棒核函数的区别
+    lossFunction = new ceres::CauchyLoss(1.0);
+
+    //! add pose parameter
+    for(int i = 0; i < 11; i++)
+    {
+        ceres::LocalParameterization *pvrpose = new PosePVR();
+        ceres::LocalParameterization *biaspose = new PoseBias();
+        problem.AddParameterBlock(all_frame_buffer[i]->PVR,9,pvrpose);
+        problem.AddParameterBlock(all_frame_buffer[i]->bgba,6,biaspose);
+    }
+
+    //! add imu
+
+    for(int i = 0; i < 10; i++)
+    {
+        Frame::Ptr last_frame = all_frame_buffer[i];
+        Frame::Ptr frame = all_frame_buffer[i+1];
+        //! imu误差
+        ceres::CostFunction* imu_factor = new ceres_slover::IMUError(last_frame,frame);
+        problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,last_frame->bgba,frame->PVR,frame->bgba);
+
+          //! bias误差
+        ceres::CostFunction* bias_factor = new ceres_slover::BiasError(frame->preintegration);
+        problem.AddResidualBlock(bias_factor,NULL,last_frame->bgba,frame->bgba);
+
+    }
+
+    //! add feature
+    //TODO 需要加一个特征点在滑窗内的匹配
+    for(int i = 0; i< 11; i++ )
+    {
+        std::vector<Feature::Ptr> fts;
+        Frame::Ptr frame = all_frame_buffer[i];
+        frame->getFeatures(fts);
+        const size_t N = fts.size();
+//        std::vector<ceres::ResidualBlockId> res_ids(N);
+
+        for(size_t i = 0; i < N; ++i)
+        {
+            Feature::Ptr ft = fts[i];
+            MapPoint::Ptr mpt = ft->mpt_;
+            if(mpt == nullptr)
+                continue;
+
+            mpt->optimal_pose_ = mpt->pose();
+            ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
+            problem.AddResidualBlock(cost_function, lossFunction, frame->PVR, mpt->optimal_pose_.data());
+//            problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
+        }
+
+    }
+    //todo 先验误差、闭环误差
+
+    ceres::Solver::Options options;
+    ceres::Solver::Summary summary;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.max_linear_solver_iterations = 20;
+
+    ceres::Solve(options, &problem, &summary);
+
+
+    //todo pvr bgba -> pose,ba,bg
+
+
+
+    //todo 封装先验误差
+
+
+
+
+
 }
 
 
