@@ -33,7 +33,10 @@ public:
     static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
 
     static void reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report=false, bool verbose=false);
-};
+
+        static void slideWindowJointOptimization(vector<Frame::Ptr> &all_frame_buffer, uint64_t *frame_id_window);
+
+    };
 
 namespace ceres_slover {
 // https://github.com/strasdat/Sophus/blob/v1.0.0/test/ceres/local_parameterization_se3.hpp
@@ -142,7 +145,7 @@ public:
 //        cout<<"residuals[1]:"<<residuals[1]<<endl;
 
 //        cout<<"residul  pose----------------->"<<endl<<residuals[0]<<" "<<residuals[1]<<endl;
-        cout<<"ssvo vision residual: "<<residuals[0]*residuals[0]+residuals[1]*residuals[1]<<endl;
+//        cout<<"ssvo vision residual: "<<residuals[0]*residuals[0]+residuals[1]*residuals[1]<<endl;
 
         if(!jacobians) return true;
         double* jacobian0 = jacobians[0];
@@ -490,7 +493,7 @@ private:
 
 
 //            cout<<"ssvo imu sqrt_info residual:"<<endl<<residual<<endl;
-            cout<<"ssvo imu  residual:"<<endl<<residual.transpose()*residual<<endl;
+//            cout<<"ssvo imu  residual:"<<endl<<residual.transpose()*residual<<endl;
 
             if (jacobians)
             {

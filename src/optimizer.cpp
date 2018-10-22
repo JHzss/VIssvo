@@ -3,6 +3,7 @@
 #include "optimizer.hpp"
 #include "config.hpp"
 #include "utils.hpp"
+#include <map>
 
 namespace ssvo{
 
@@ -85,6 +86,11 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
 
 
     kf2->setTwb(tmp);
+
+//    kf2->v = Vector3d(kf2->PVR[3],kf2->PVR[4],kf2->PVR[5]);
+
+    //todo
+//    kf2->updatePoseAndBias();
 
     kf1->optimal_Tcw_ = kf1->Tcw();
     kf2->optimal_Tcw_ = kf2->Tcw();
@@ -213,6 +219,9 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
         SE3d tmp(ttttt,t);
 
         kf->setTwb(tmp);
+
+        //! 没有优化
+//        kf->v = Vector3d(kf->PVR[3],kf->PVR[4],kf->PVR[5]);
 
     }
 
@@ -425,32 +434,25 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 
     ceres::LocalParameterization* biaspose = new PoseBias();
     ceres::LocalParameterization* biaspose1 = new PoseBias();
-//    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
-//    problem.AddParameterBlock(frame->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
-      problem.AddParameterBlock(frame->PVR, 9, pvrpose);
+    problem.AddParameterBlock(frame->PVR, 9, pvrpose);
 
     //!by jh
-        double bias_i[6];
-        bias_i[0] = last_frame->preintegration->bg.x();
-        bias_i[1] = last_frame->preintegration->bg.y();
-        bias_i[2] = last_frame->preintegration->bg.z();
-        bias_i[3] = last_frame->preintegration->ba.x();
-        bias_i[4] = last_frame->preintegration->ba.y();
-        bias_i[5] = last_frame->preintegration->ba.z();
+        last_frame->bgba[0] = last_frame->preintegration->bg.x();
+        last_frame->bgba[1] = last_frame->preintegration->bg.y();
+        last_frame->bgba[2] = last_frame->preintegration->bg.z();
+        last_frame->bgba[3] = last_frame->preintegration->ba.x();
+        last_frame->bgba[4] = last_frame->preintegration->ba.y();
+        last_frame->bgba[5] = last_frame->preintegration->ba.z();
 
-        double bias_j[6];
-        bias_j[0] = frame->preintegration->bg.x();
-        bias_j[1] = frame->preintegration->bg.y();
-        bias_j[2] = frame->preintegration->bg.z();
-        bias_j[3] = frame->preintegration->ba.x();
-        bias_j[4] = frame->preintegration->ba.y();
-        bias_j[5] = frame->preintegration->ba.z();
+        frame->bgba[0] = frame->preintegration->bg.x();
+        frame->bgba[1] = frame->preintegration->bg.y();
+        frame->bgba[2] = frame->preintegration->bg.z();
+        frame->bgba[3] = frame->preintegration->ba.x();
+        frame->bgba[4] = frame->preintegration->ba.y();
+        frame->bgba[5] = frame->preintegration->ba.z();
 
-
-        problem.AddParameterBlock(bias_i,6,biaspose);
-        problem.AddParameterBlock(bias_j,6,biaspose1);
-//        problem.SetParameterBlockConstant(bias_i);
-//        problem.SetParameterBlockConstant(bias_j);
+        problem.AddParameterBlock(last_frame->bgba,6,biaspose);
+        problem.AddParameterBlock(frame->bgba,6,biaspose1);
 
     static const double scale = Config::imagePixelUnSigma() * std::sqrt(3.81);
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
@@ -511,23 +513,23 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
         }
     }
 
-//        ceres::LocalParameterization* PVRpose = new PosePVR();
-    //! by jh
+        /*
         if(vio)
         {
             //! imu误差
-//            ceres::LocalParameterization* pvrpose1 = new PosePVR();
-//            problem.AddParameterBlock(last_frame->PVR,9,pvrpose1);
-//            problem.SetParameterBlockConstant(last_frame->PVR);
-//
-//            ceres::CostFunction* imu_factor = new ceres_slover::IMUError(last_frame,frame);
-//            problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,bias_i,frame->PVR,bias_j);
-//
-//          //! bias误差
-//            ceres::CostFunction* bias_factor = new ceres_slover::BiasError(frame->preintegration);
-//            problem.AddResidualBlock(bias_factor,NULL,bias_i,bias_j);
+            ceres::LocalParameterization* pvrpose1 = new PosePVR();
+            problem.AddParameterBlock(last_frame->PVR,9,pvrpose1);
+            problem.SetParameterBlockConstant(last_frame->PVR);
+
+            ceres::CostFunction* imu_factor = new ceres_slover::IMUError(last_frame,frame);
+            problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,last_frame->bgba,frame->PVR,frame->bgba);
+
+            //! bias误差
+            ceres::CostFunction* bias_factor = new ceres_slover::BiasError(frame->preintegration);
+            problem.AddResidualBlock(bias_factor,NULL,last_frame->bgba,frame->bgba);
 
         }
+         */
 
     ceres::Solver::Options options;
     ceres::Solver::Summary summary;
@@ -538,7 +540,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 
     ceres::Solve(options, &problem, &summary);
 
-
+        /*
 //        double sum=0;
 //        int l=0;
 //        std::vector<ceres::ResidualBlockId> ids;
@@ -556,8 +558,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
 //    cout << summary.FullReport() << endl;
 //    ROS_DEBUG("Iterations : %d", static_cast<int>(summary.iterations.size()));
 //        waitKey(0);
-        
-
+         */
         //todo 改了特征点的权重之后先不要加这个东西！！！
     if(0/*reject*/)
     {
@@ -582,30 +583,10 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
     }
 
     //! update pose
-
-//        cout<<"优化结果："<<endl<<frame->optimal_Tcw_.translation()<<endl;
-
-        Vector3d t = Vector3d(frame->PVR[0],frame->PVR[1],frame->PVR[2]);
-        Vector3d w = Vector3d(frame->PVR[6],frame->PVR[7],frame->PVR[8]);
-
-        Matrix3d ttttt = Sophus::SO3d::exp(w).matrix();
-
-        SE3d tmp(ttttt,t);
-
-
-        frame->setTwb(tmp);
-
-        last_frame->preintegration->bg = Eigen::Vector3d(bias_i[0],bias_i[1],bias_i[2]);
-        last_frame->preintegration->ba = Eigen::Vector3d(bias_i[3],bias_i[4],bias_i[5]);
-
-        frame->preintegration->bg = last_frame->preintegration->bg;
-        frame->preintegration->ba = last_frame->preintegration->ba;
-
-        frame->v = Vector3d(frame->PVR[3],frame->PVR[4],frame->PVR[5]);
-
+        frame->updatePoseAndBias();
     //! Report
 //    reportInfo(problem, summary, report, verbose);
-
+/*
         double sum=0;
         int l=0;
         std::vector<ceres::ResidualBlockId> ids;
@@ -646,12 +627,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &last_frame,const Fr
         cout<<"sum: "<<sum<<endl;
 //        cout<<"视觉误差量个数："<<N<<endl;
         cout << summary.FullReport() << endl;
-
-
-
-
-
-
+        */
 
 }
 
@@ -801,6 +777,165 @@ void Optimizer::reportInfo(const ceres::Problem &problem, const ceres::Solver::S
         }
     }
 }
+
+    void Optimizer::slideWindowJointOptimization(vector<Frame::Ptr> &all_frame_buffer, uint64_t *frame_id_window)
+    {
+
+        cout<<"-------------------------------------slideWindowJointOptimization--------------------------------------"<<endl;
+        vector<MapPoint::Ptr> local_mappoints;
+        vector<uint64_t > mappoints_ids;
+        vector<pair<uint64_t ,vector<uint64_t >>> mappointID_frameIDS;
+        vector<pair<uint64_t ,vector<Vector3d >>> mappointfn_frameIDS;
+        ceres::Problem problem;
+
+        //todo 理解不同的鲁棒核函数的区别
+        static const double scale = Config::imagePixelUnSigma() * std::sqrt(3.81);
+        ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
+
+        //! add pose parameter
+        for(int i = 0; i < WINDOW_SIZE+1; i++)
+        {
+            ceres::LocalParameterization *pvrpose = new PosePVR();
+            ceres::LocalParameterization *biaspose = new PoseBias();
+            problem.AddParameterBlock(all_frame_buffer[i]->PVR,9,pvrpose);
+            problem.AddParameterBlock(all_frame_buffer[i]->bgba,6,biaspose);
+        }
+
+        //! add imu
+
+        for(int i = 0; i < WINDOW_SIZE; i++)
+        {
+            int id_i = frame_id_window[i];
+            int id_j = frame_id_window[i+1];
+
+            cout<<"imu residual id_i: "<<id_i<<endl;
+            cout<<"imu residual id_j: "<<id_j<<endl;
+            Frame::Ptr last_frame = all_frame_buffer[id_i];
+            Frame::Ptr frame = all_frame_buffer[id_j];
+            //! imu误差
+            ceres::CostFunction* imu_factor = new ceres_slover::IMUError(last_frame,frame);
+            problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,last_frame->bgba,frame->PVR,frame->bgba);
+
+            //! bias误差
+            ceres::CostFunction* bias_factor = new ceres_slover::BiasError(frame->preintegration);
+            problem.AddResidualBlock(bias_factor,NULL,last_frame->bgba,frame->bgba);
+        }
+
+        //! add feature
+        //TODO 需要加一个特征点在滑窗内的匹配,需要用特征点的描述子进行匹配
+        for(int i = 0; i< WINDOW_SIZE+1; i++ )
+        {
+            int id = frame_id_window[i];
+            std::vector<Feature::Ptr> fts;
+            Frame::Ptr frame = all_frame_buffer[id];
+            frame->getFeatures(fts);
+            const size_t N = fts.size();
+//        std::vector<ceres::ResidualBlockId> res_ids(N);
+            for(size_t j = 0; j < N; ++j)
+            {
+                Feature::Ptr ft = fts[j];
+                MapPoint::Ptr mpt = ft->mpt_;
+
+                if(mpt == nullptr)
+                    continue;
+
+                vector<uint64_t >::iterator it = find(mappoints_ids.begin(), mappoints_ids.end(), mpt->id_);
+
+                if(it==mappoints_ids.end())
+                {
+                    vector<uint64_t> frame_ids;
+                    frame_ids.push_back(frame->id_);
+                    mappointID_frameIDS.push_back(make_pair(mpt->id_,frame_ids));
+
+                    vector<Vector3d> frame_fns;
+                    frame_fns.push_back(ft->fn_);
+                    mappointfn_frameIDS.push_back(make_pair(mpt->id_,frame_fns));
+                    local_mappoints.push_back(mpt);
+                    mappoints_ids.push_back(mpt->id_);
+                }
+                else
+                {
+                    for(int i=0;i<mappointID_frameIDS.size();i++)
+                    {
+                        if(mappointID_frameIDS[i].first==mpt->id_)
+                        {
+                            mappointID_frameIDS[i].second.push_back(frame->id_);
+                            mappointfn_frameIDS[i].second.push_back(ft->fn_);
+                            break;
+                        }
+                    }
+                }
+            }
+
+        }
+        cout<<" mappoint size: "<<local_mappoints.size()<<endl;
+
+        for(int i=0;i<local_mappoints.size();i++)
+        {
+            MapPoint::Ptr mpt = local_mappoints[i];
+            mpt->optimal_pose_ = mpt->pose();
+            cout<<"mappoint id: "<<mpt->id_<<endl;
+            for(int j = 0;j<mappointID_frameIDS[i].second.size();j++)
+            {
+                Vector3d fn = mappointfn_frameIDS[i].second[j];
+                ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(fn[0]/fn[2], fn[1]/fn[2]);//, 1.0/(1<<ft->level_));
+                problem.AddResidualBlock(cost_function1, lossfunction, all_frame_buffer[mappointID_frameIDS[i].second[j]]->PVR, mpt->optimal_pose_.data());
+            }
+        }
+
+        //todo 先验误差、闭环误差
+
+        ceres::Solver::Options options;
+        ceres::Solver::Summary summary;
+        options.linear_solver_type = ceres::DENSE_SCHUR;
+        options.max_linear_solver_iterations = 20;
+
+        ceres::Solve(options, &problem, &summary);
+
+        waitKey(0);
+
+
+        //todo pvr bgba -> pose,ba,bg
+        for(int i=0;i<WINDOW_SIZE+1;i++)
+        {
+            int id = frame_id_window[i];
+            all_frame_buffer[id]->updatePoseAndBias();
+        }
+
+        //! update mpts & remove mappoint with large error
+//        std::set<KeyFrame::Ptr> changed_keyframes;
+//        static const double max_residual = Config::imagePixelUnSigma2() * std::sqrt(3.81);
+        for(const MapPoint::Ptr &mpt : local_mappoints)
+        {
+//            const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+//            for(const auto &item : obs)
+//            {
+//                double residual = utils::reprojectError(item.second->fn_.head<2>(), item.first->Tcw(), mpt->optimal_pose_);
+//                if(residual < max_residual)
+//                    continue;
+//
+//                mpt->removeObservation(item.first);
+//                changed_keyframes.insert(item.first);
+////            std::cout << " rm outlier: " << mpt->id_ << " " << item.first->id_ << " " << obs.size() << std::endl;
+//
+////            if(mpt->type() == MapPoint::BAD)
+////            {
+////                bad_mpts.push_back(mpt);
+////            }
+//            }
+
+            mpt->setPose(mpt->optimal_pose_);
+        }
+
+//        for(const KeyFrame::Ptr &kf : changed_keyframes)
+//        {
+//            kf->updateConnections();
+//        }
+
+        //todo 封装先验误差
+
+
+    }
 
 
 }

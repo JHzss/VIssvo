@@ -68,70 +68,9 @@ namespace ssvo {
             if(dt==0)continue;
             w=gyr_tmp*dt;
 
-//            eigen2cv(w,w_mat);
-//            Rodrigues(w_mat,deltaR_wt_mat);
-//            cv2eigen(deltaR_wt_mat,deltaR_wt_eigen);
-
-            Sophus::SO3d deltaR_;
-
-            double theta_;
-            theta_ = w.norm();
-            double half_theta = 0.5*(theta_);
-
-            double imag_factor;
-            double real_factor = cos(half_theta);
-            if((theta_)<1e-10)
-            {
-                double theta_sq = (theta_)*(theta_);
-                double theta_po4 = theta_sq*theta_sq;
-                imag_factor = 0.5-0.0208333*theta_sq+0.000260417*theta_po4;
-            }
-            else
-            {
-                double sin_half_theta = sin(half_theta);
-                imag_factor = sin_half_theta/(theta_);
-            }
-
-            deltaR_= Sophus::SO3d(Quaterniond(real_factor,
-                                   imag_factor*w.x(),
-                                   imag_factor*w.y(),
-                                   imag_factor*w.z()));
-            deltaR_wt_eigen=deltaR_.matrix();
-
-
-
-            //! 王京简化了一些,计算right jacobian of SO(3)
-
-                /*
-                 * 王京中的特殊处理
-                 * if(theta<0.00001)
-                    {
-                         return Jr;// = Matrix3d::Identity();
-                    }
-                 */
-
-                Jr = Matrix3d::Identity();
-                double theta=w.norm();
-//                Matrix3d w_skew=skew(w);
-                if(theta<0.00001)
-                {
-                    Jr=Matrix3d::Identity();
-//                    Jr_inv=Matrix3d::Identity();
-                } else
-                {
-
-                    Vector3d k = w.normalized();  // k - unit direction vector of w
-                    Matrix3d K = skew(k);
-                    Jr =   Matrix3d::Identity()
-                           - (1-cos(theta))/theta*K
-                           + (1-sin(theta)/theta)*K*K;
-//                    Jr=Matrix3d::Identity()
-//                       -(1-cos(theta))/(theta*theta)*w_skew
-//                       +(theta-sin(theta))/(theta*theta*theta)*w_skew*w_skew;
-//                    Jr_inv=Matrix3d::Identity()
-//                           +0.5*w_skew
-//                           +(1/(theta*theta)-(1+cos(theta))/(0.5*theta*sin(theta)))*w_skew*w_skew;//SVO的作者公式计算有点问题，查资料看王京写的改正了。
-                }
+            deltaR_wt_eigen = Sophus_new::SO3::exp(w).matrix();
+            Jr = Sophus_new::SO3::JacobianR(w);
+            Jr_inv = Sophus_new::SO3::JacobianRInv(w);
 
             ///角度太小了？罗德里格斯公式不可以直接用？
 //                tmp_dr=cos(theta)*Matrix3d::Identity()+(1-cos(theta))*w*w.transpose()+sin(theta)*w_skew;
@@ -200,6 +139,16 @@ namespace ssvo {
         dp=Eigen::Vector3d::Zero();
         dv=Eigen::Vector3d::Zero();
         dR=Eigen::Matrix<double,3,3>::Identity();
+        run();
+    }
+
+    void Preintegration::addAndUpdate(Preintegration::Ptr preintegration)
+    {
+        //! 用关键帧的bias进行计算
+        //TODO 融合buf，积分
+        dt_buf.insert(dt_buf.end(),preintegration->dt_buf.begin(),preintegration->dt_buf.end());
+        acc_buf.insert(acc_buf.end(),preintegration->acc_buf.begin(),preintegration->acc_buf.end());
+        gyr_buf.insert(gyr_buf.end(),preintegration->gyr_buf.begin(),preintegration->gyr_buf.end());
         run();
     }
 

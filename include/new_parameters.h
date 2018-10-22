@@ -7,6 +7,7 @@
 
 #include "global.hpp"
 
+const int WINDOW_SIZE = 10;
 extern double acc_n,acc_w;
 extern double gyr_n,gyr_w;
 extern cv::Mat Rc2b,tc2b;//Rotation from camera frame to imu frame

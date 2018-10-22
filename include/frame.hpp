@@ -91,7 +91,7 @@ public:
 
     bool removeSeed(const Seed::Ptr &seed);
 
-
+    void updatePoseAndBias();
 
     bool hasSeed(const Seed::Ptr &seed);
 
@@ -164,6 +164,7 @@ public:
     SE3d optimal_Twb_;//! for optimization
 
     double PVR[9]; //! for optimization
+    double bgba[6];
 
     double disparity_;//! for depth filter
 

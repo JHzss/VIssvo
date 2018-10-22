@@ -16,6 +16,7 @@ float Frame::light_affine_b_ = 0.0f;
 Frame::Frame(const cv::Mat &img, const double timestamp, const AbstractCamera::Ptr &cam, Vector3d ba_, Vector3d bg_, Preintegration::Ptr& preint) :
     id_(next_id_++), timestamp_(timestamp), cam_(cam), max_level_(Config::imageTopLevel()), preintegration(preint)
 {
+    v = Vector3d(0,0,0);
     gray_image=img;
     Tcw_ = SE3d(Matrix3d::Identity(), Vector3d::Zero());
     Twc_ = Tcw_.inverse();
@@ -382,5 +383,24 @@ std::map<KeyFrame::Ptr, int> Frame::getOverLapKeyFrames()
 
     return overlap_kfs;
 }
+
+    void Frame::updatePoseAndBias()
+    {
+        Vector3d t = Vector3d(PVR[0],PVR[1],PVR[2]);
+        Vector3d w = Vector3d(PVR[6],PVR[7],PVR[8]);
+
+        Matrix3d ttttt = Sophus::SO3d::exp(w).matrix();
+        SE3d tmp(ttttt,t);
+        setTwb(tmp);
+
+        v = Vector3d(PVR[3],PVR[4],PVR[5]);
+
+        preintegration->bg.x() = bgba[0];
+        preintegration->bg.y() = bgba[1];
+        preintegration->bg.z() = bgba[2];
+        preintegration->ba.x() = bgba[3];
+        preintegration->ba.y() = bgba[4];
+        preintegration->ba.z() = bgba[5];
+    }
 
 }

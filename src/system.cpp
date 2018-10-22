@@ -423,6 +423,9 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
     void System::process( pair< vector< ssvo::IMUData>,pair< Mat,double>> measurement)
     {
         cout/*<< fixed << setprecision(6)*/<< "Begin track "<<measurement.second.second<<"th frame."<<endl;
+        cout<<"frame_num_in_window: "<<frame_num_in_window<<endl;
+        cout<<"keframe num: "<<mapper_->map_->KeyFramesInMap()<<endl;
+        cout<<"initilization_frame_buffer_ num: "<<initilization_frame_buffer_.size()<<endl;
         if(!vio_init)
         {
 //        bool ok1=false;
@@ -482,9 +485,11 @@ void System::process(pair<vector<sensor_msgs::ImuPtr>,sensor_msgs::ImageConstPtr
             if( ok1&&initilization_frame_buffer_.size()>50)
              */
             //! 50更利于imu和相机之间的初始化 20 100的效果都不如50，但是应该会根据数据集变化， 50的话是 3.95  3.96
-            if(initilization_frame_buffer_.size()>=100)
+            if(frame_num_in_window==WINDOW_SIZE)
             {
                 vio_init = vio_process();
+
+//                waitKey(0);
 
                 if(!vio_init)
                 {
@@ -602,6 +607,14 @@ System::Status System::initialize()
         reference_keyframe_ = kf1;
         last_keyframe_ = kf1;
 
+
+    Vector3d ba={0,0,0},bg={0,0,0};
+    preintergration_in_window[0] = Preintegration::creat(ba,bg);
+    preintergration_in_window[0]->copyPreintegration(kf1->preintegration);
+    frame_id_window[0] = kf1->frame_id_;
+
+    frame_num_in_window = 1;
+
 //    cout<<"kf1:"<<kf1->frame_id_<<endl;
 //    cout<<"kf1 pose:"<<kf1->Tcw().translation()<<endl;
 //    waitKey(0);
@@ -629,17 +642,8 @@ System::Status System::initialize()
 System::Status System::tracking()
 {
     //! jh 输出
-    /*
-    cout<<"last_frame_ id "<<last_frame_->id_<<endl;
-    cout<<"current_frame_ id "<<current_frame_->id_<<endl;
-    cout<<"reference_keyframe_ id "<<reference_keyframe_->frame_id_<<endl;
-    cout<<"last_frame_ pose "<<(last_frame_->pose()).rotationMatrix()<<endl;
-    cout<<"current_frame_ pose "<<(current_frame_->pose()).rotationMatrix()<<endl;
-     */
-
 
     current_frame_->setRefKeyFrame(reference_keyframe_);
-
 
     //! track seeds
 
@@ -649,6 +653,13 @@ System::Status System::tracking()
     // TODO 先验信息怎么设置？
 
     current_frame_->setPose(last_frame_->pose());
+
+    //! 向滑窗中加入状态
+    Vector3d ba={0,0,0},bg={0,0,0};
+    preintergration_in_window[frame_num_in_window] = Preintegration::creat(ba,bg);
+    preintergration_in_window[frame_num_in_window]->copyPreintegration(current_frame_->preintegration);
+    frame_id_window[frame_num_in_window] = current_frame_->id_;
+    frame_num_in_window++;
 
     ///粗略估计当前帧的位姿，而不是像ORB那样很粗略
     //! alignment by SE3
@@ -689,16 +700,34 @@ System::Status System::tracking()
 
 //    sysTrace->startTimer("per_depth_filter");
 
+    //! 如果vio初始化完成，就联合优化，否则认为是还没有足够的帧用来初始化，则向slide window中插入当前帧
+    if(vio_init)
+    {
+//        sysTrace->startTimer("slide window optimization");
+        Optimizer::slideWindowJointOptimization(all_frame_buffer_,frame_id_window);
+//        sysTrace->stopTimer("slide window optimization");
+    }
+
     if(createNewKeyFrame(matches) )
     {
+        slideWindowFlag = Slide_old;
 
         depth_filter_->insertFrame(current_frame_, reference_keyframe_);
 
         mapper_->insertKeyFrame(reference_keyframe_);
+
+        if(frame_num_in_window==WINDOW_SIZE+1)
+        {
+            slideWindow();
+            frame_num_in_window --;
+        }
     }
     else
     {
+        slideWindowFlag = Slide_new;
         depth_filter_->insertFrame(current_frame_, nullptr);
+        slideWindow();
+        frame_num_in_window --;
     }
 //    sysTrace->stopTimer("per_depth_filter");
 
@@ -1137,6 +1166,25 @@ bool System::vio_process()
         }
 
         return true;
+    }
+
+    void System::slideWindow()
+    {
+        if(slideWindowFlag == Slide_old)
+        {
+            for(int i=0;i<frame_num_in_window;i++)
+            {
+                frame_id_window[i]=frame_id_window[i+1];
+                swap(preintergration_in_window[i],preintergration_in_window[i+1]);
+            }
+
+        }
+        else
+        {
+            //! Slide_new
+            preintergration_in_window[frame_num_in_window-2]->addAndUpdate(preintergration_in_window[frame_num_in_window-1]);
+        }
+
     }
 
 }
