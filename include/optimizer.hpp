@@ -34,10 +34,16 @@ public:
 
     static void reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report=false, bool verbose=false);
 
+<<<<<<< HEAD
 
 
     static void slideWindowJointOptimization(vector<Frame::Ptr> &all_frame_buffer);
 };
+=======
+        static void slideWindowJointOptimization(vector<Frame::Ptr> &all_frame_buffer, uint64_t *frame_id_window);
+
+    };
+>>>>>>> newbranch
 
 namespace ceres_slover {
 // https://github.com/strasdat/Sophus/blob/v1.0.0/test/ceres/local_parameterization_se3.hpp
@@ -494,7 +500,7 @@ private:
 
 
 //            cout<<"ssvo imu sqrt_info residual:"<<endl<<residual<<endl;
-            cout<<"ssvo imu  residual:"<<endl<<residual.transpose()*residual<<endl;
+//            cout<<"ssvo imu  residual:"<<endl<<residual.transpose()*residual<<endl;
 
             if (jacobians)
             {

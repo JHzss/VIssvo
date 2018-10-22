@@ -5,6 +5,7 @@
 #include "new_parameters.h"
 #include <opencv2/core/eigen.hpp>
 
+//int WINDOW_SIZE = 10;
 double acc_n;
 double acc_w;
 double gyr_n;

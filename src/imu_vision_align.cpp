@@ -48,6 +48,12 @@ Vector3d EstimateGyrBias(deque<Frame::Ptr> &initilization_frame_buffer_)
         ///这里注意一下bg值都得更新，因为当初没弄好，就注意一下吧
 //        frame->bg+=delta_bg;
         frame->preintegration->bg+=delta_bg;
+        frame->bgba[0] = delta_bg.x();
+        frame->bgba[1] = delta_bg.y();
+        frame->bgba[2] = delta_bg.z();
+        frame->bgba[3] = 0;
+        frame->bgba[4] = 0;
+        frame->bgba[5] = 0;
         frame->preintegration->rerun();
     }
     return delta_bg;

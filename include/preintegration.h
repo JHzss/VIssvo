@@ -68,6 +68,38 @@ namespace ssvo {
             return residuals;
         }
 
+        void copyPreintegration(Preintegration::Ptr preintegration)
+        {
+            this->covariance = preintegration->covariance;
+            this->ba_tmp = preintegration->ba_tmp;
+            this->bg_tmp = preintegration->bg_tmp;
+            this->ba = preintegration->ba;
+            this->bg = preintegration->bg;
+
+            this->noise_ba = preintegration->noise_ba;
+            this->noise_bg = preintegration->noise_bg;
+            this->noise_bias = preintegration->noise_bias;
+            this->sum_t = preintegration->sum_t;
+
+            this->dp = preintegration->dp;
+            this->dv = preintegration->dv;
+            this->dR = preintegration->dR;
+
+            this->jacobian_P_ba = preintegration->jacobian_P_ba;
+            this->jacobian_P_bg = preintegration->jacobian_P_bg;
+            this->jacobian_V_ba = preintegration->jacobian_V_ba;
+            this->jacobian_V_bg = preintegration->jacobian_V_bg;
+            this->jacobian_R_bg = preintegration->jacobian_R_bg;
+
+            this->img_stamp = preintegration->img_stamp;
+
+            this->dt_buf.assign(preintegration->dt_buf.begin(),preintegration->dt_buf.end());
+            this->acc_buf.assign(preintegration->acc_buf.begin(),preintegration->acc_buf.end());
+            this->gyr_buf.assign(preintegration->gyr_buf.begin(),preintegration->gyr_buf.end());
+        }
+
+        void addAndUpdate(Preintegration::Ptr preintegration);
+
     public:
 
         Eigen::Matrix<double, 9, 9> covariance;
