@@ -158,31 +158,14 @@ private:
         //! slide window
 
         SlideWindowFlag slideWindowFlag;
-<<<<<<< HEAD
-        double bias_window[11][6];
-        double pvr_window[11][9];
-        double feature_window[1001][3];
 
-        Vector3d p_window[11];
-        Vector3d v_window[11];
-        Vector3d r_window[11];
-        Vector3d ba_window[11];
-        Vector3d bg_window[11];
-
-        int frame_id_window[11];
-
-        int frame_num_in_window;
-
-        Preintegration::Ptr preintergration[11];
-
-=======
 
         uint64_t frame_id_window[(WINDOW_SIZE+1)];
 
         int frame_num_in_window;
 
         Preintegration::Ptr preintergration_in_window[(WINDOW_SIZE+1)];
->>>>>>> newbranch
+
 
 };
 
