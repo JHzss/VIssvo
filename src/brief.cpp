@@ -264,7 +264,7 @@ static int bit_pattern_31_[256*4] =
         -1,-6, 0,-11/*mean (0.127148), correlation (0.547401)*/
     };
 
-BRIEF::BRIEF()
+    BRIEF::BRIEF()
 {
     const int npoints = 512;
     const cv::Point* pattern0 = (const cv::Point*)bit_pattern_31_;

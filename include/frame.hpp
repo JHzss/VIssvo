@@ -91,6 +91,8 @@ public:
 
     bool removeSeed(const Seed::Ptr &seed);
 
+    void updatePose();
+
     void updatePoseAndBias();
 
     bool hasSeed(const Seed::Ptr &seed);

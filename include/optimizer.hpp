@@ -189,7 +189,7 @@ public:
         return true;
     }
 
-    static inline ceres::CostFunction *Create(const double observed_x, const double observed_y, const double weight = 460.0) {
+    static inline ceres::CostFunction *Create(const double observed_x, const double observed_y, const double weight = 1.0) {
         return (new ReprojectionErrorSE3(observed_x, observed_y, weight));
     }
 

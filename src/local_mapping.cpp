@@ -872,7 +872,7 @@ void LocalMapper::addToDatabase(const KeyFrame::Ptr &keyframe)
 #endif
 }
 
-KeyFrame::Ptr LocalMapper::relocalizeByDBoW(const Frame::Ptr &frame, const Corners &corners)
+KeyFrame::Ptr LocalMapper::relocalizeByDBoW(const Frame::Ptr &frame, const Corners &corners, std::vector<uint64_t > &frame_ids,std::vector<MapPoint::Ptr> &MapPointMatches)
 {
     KeyFrame::Ptr reference = nullptr;
 
@@ -911,6 +911,12 @@ KeyFrame::Ptr LocalMapper::relocalizeByDBoW(const Frame::Ptr &frame, const Corne
     DBoW3::Result result = results[0];
 
     reference = map_->getKeyFrame(result.Id);
+
+    //! 计算描述子、特征向量、词袋向量
+//    reference->conputeDescriptor(brief);
+//    reference->computeBoW(vocabulary_);
+
+
 
 #endif
 

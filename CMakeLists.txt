@@ -5,7 +5,7 @@ project(ssvo)
 ## User's option
 ## -----------------------
 option(SSVO_TEST_ENABLE "If build the test files." OFF)
-option(SSVO_DBOW_ENABLE "If use the DBoW library." OFF)
+option(SSVO_DBOW_ENABLE "If use the DBoW library." ON)
 option(SSVO_TRACE_ENABLE "If use the time tracing." ON)
 message(STATUS "Test Enable  : "   ${SSVO_TEST_ENABLE})
 message(STATUS "DBoW Enable  : "   ${SSVO_DBOW_ENABLE})

@@ -112,6 +112,8 @@ void Frame::setPose(const SE3d& pose)
     PVR[6] = phii.x();
     PVR[7] = phii.y();
     PVR[8] = phii.z();
+
+//    this->getRefKeyFrame()->setPose(pose);
 }
 
 void Frame::setPose(const Matrix3d& R, const Vector3d& t)
@@ -134,6 +136,8 @@ void Frame::setPose(const Matrix3d& R, const Vector3d& t)
     PVR[6] = phii.x();
     PVR[7] = phii.y();
     PVR[8] = phii.z();
+
+//    this->getRefKeyFrame()->setPose(Twc_);
 }
 
 void Frame::setTcw(const SE3d &Tcw)
@@ -156,7 +160,7 @@ void Frame::setTcw(const SE3d &Tcw)
     PVR[6] = phii.x();
     PVR[7] = phii.y();
     PVR[8] = phii.z();
-
+//    this->getRefKeyFrame()->setTcw(Twc_);
 }
 
     void Frame::setTwb(const SE3d &Twb)
@@ -401,6 +405,18 @@ std::map<KeyFrame::Ptr, int> Frame::getOverLapKeyFrames()
         preintegration->ba.x() = bgba[3];
         preintegration->ba.y() = bgba[4];
         preintegration->ba.z() = bgba[5];
+    }
+
+    void Frame::updatePose()
+    {
+        Vector3d t = Vector3d(PVR[0],PVR[1],PVR[2]);
+        Vector3d w = Vector3d(PVR[6],PVR[7],PVR[8]);
+
+        Matrix3d ttttt = Sophus::SO3d::exp(w).matrix();
+        SE3d tmp(ttttt,t);
+        setTwb(tmp);
+        v = Vector3d(PVR[3],PVR[4],PVR[5]);
+
     }
 
 }

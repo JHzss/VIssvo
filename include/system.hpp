@@ -106,6 +106,7 @@ private:
 
     Viewer::Ptr viewer_;
 
+        //这个没用到啊
     std::thread viewer_thread_;
 
     cv::Mat rgb_;

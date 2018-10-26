@@ -46,6 +46,11 @@
 //EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Matrix3d)
 //EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Vector3d)
 
+#include <DBoW3/DBoW3.h>
+#include <DBoW3/DescManip.h>
+#include "brief.hpp"
+
+
 using namespace Eigen;
 using namespace std;
 using Sophus::SE3d;

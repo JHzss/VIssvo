@@ -244,4 +244,28 @@ void KeyFrame::removeConnection(const KeyFrame::Ptr &kf)
     updateOrderedConnections();
 }
 
+//    void KeyFrame::conputeDescriptor(const BRIEF::Ptr &brief)
+//    {
+//        std::vector<cv::KeyPoint> kps; kps.reserve(mpt_fts_.size());
+//        for(auto mpt_ft : mpt_fts_)
+//        {
+//            const Feature::Ptr ft = mpt_ft.second;
+//            kps.emplace_back(cv::KeyPoint(ft->corner_.x, ft->corner_.y, 31, -1, 0, ft->corner_.level));
+//        }
+//
+//        cv::Mat _descriptors;
+//        brief->compute(images(), kps, _descriptors);
+//
+//        descriptors_.reserve(_descriptors.rows);
+//        for(int i = 0; i < _descriptors.rows; i++)
+//            descriptors_.push_back(_descriptors.row(i));
+//    }
+//
+//    void KeyFrame::computeBoW(const DBoW3::Vocabulary& vocabulary)
+//    {
+//        LOG_ASSERT(!descriptors_.empty()) << "Please use conputeDescriptor first!";
+//        if(bow_vec_.empty())
+//            vocabulary.transform(descriptors_, bow_vec_, feat_vec_, 4);
+//    }
+
 }

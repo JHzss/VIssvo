@@ -111,6 +111,31 @@ namespace ssvo{
 
         viewer_->waitForFinish();
     }
+
+    cv::Mat showMatch(const Mat& img1,const Mat& img2,const vector<Point2f>& points1,const vector<Point2f>& points2)
+    {
+        Mat img_show;
+        int image_width = img1.cols;
+        vector<Point2f> points1_copy,points2_copy;
+        points1_copy.assign(points1.begin(),points1.end());
+        points2_copy.assign(points2.begin(),points2.end());
+        for(auto iter2=points2_copy.begin();iter2!=points2_copy.end();)
+        {
+            iter2->x+=image_width;
+            iter2++;
+        }
+        cv::RNG rng(time(0));
+        hconcat(img1,img2,img_show);
+        vector<Point2f>::iterator iter1,iter2;
+        for(iter1=points1_copy.begin(),iter2=points2_copy.begin();iter1!=points1_copy.end();iter1++,iter2++)
+        {
+            line(img_show,*iter1,*iter2,cv::Scalar(rng.uniform(0,255),rng.uniform(0,255),rng.uniform(0,255)),1);
+//            circle(img_show,*iter1,1,0,2);
+//            circle(img_show,*iter2,1,0,2);
+        }
+        return img_show;
+    }
+
     Preintegration::Ptr System::Imu_process(vector<sensor_msgs::ImuPtr> &imus, Vector3d &ba, Vector3d &bg)
     {
         double last_time = -1;
@@ -624,9 +649,6 @@ namespace ssvo{
         initializer_->reset();
 
 //    ros::shutdown();
-
-
-
 //    waitKey(0);
 
         return STATUS_INITAL_SUCCEED;
@@ -753,19 +775,41 @@ namespace ssvo{
         Corners corners_old;
         fast_detector_->detect(current_frame_->images(), corners_new, corners_old, Config::minCornersPerKeyFrame());
 
-        reference_keyframe_ = mapper_->relocalizeByDBoW(current_frame_, corners_new);
+
+        std::vector<uint64_t > frame_ids;
+        std::vector<MapPoint::Ptr> MapPointMatches;
+        reference_keyframe_ = mapper_->relocalizeByDBoW(current_frame_, corners_new, frame_ids , MapPointMatches);
+
+        std::cout<<"size: "<<frame_ids.size()<<std::endl;
+        for(int i=0;i<frame_ids.size();i++)
+        {
+            cv::Mat img = all_frame_buffer_[frame_ids[i]]->getImage(0);
+            std::string name;
+            name = "/home/jh/img/frame" + std::to_string(frame_ids[i]) + ".png";
+            cv::imwrite(name,img);
+            std::cout<<"save frame "<<frame_ids[i]<<std::endl;
+        }
+
+        if(reference_keyframe_ != nullptr)
+        {
+            std::cout<<"reference_keyframe_ frame id :"<<reference_keyframe_->frame_id_<<std::endl;
+        }
 
         if(reference_keyframe_ == nullptr)
             return STATUS_TRACKING_BAD;
 
         current_frame_->setPose(reference_keyframe_->pose());
 
-        //! alignment by SE3
-        AlignSE3 align;
-        int matches = align.run(reference_keyframe_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8);
 
-        if(matches < 30)
-            return STATUS_TRACKING_BAD;
+
+
+        int matches;
+        //! alignment by SE3
+//        AlignSE3 align;
+//        matches = align.run(reference_keyframe_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8);
+//
+//        if(matches < 30)
+//            return STATUS_TRACKING_BAD;
 
         current_frame_->setRefKeyFrame(reference_keyframe_);
         matches = feature_tracker_->reprojectLoaclMap(current_frame_);

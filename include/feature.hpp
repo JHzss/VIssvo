@@ -8,6 +8,7 @@
 #include "global.hpp"
 #include "camera.hpp"
 #include "config.hpp"
+#include "feature_detector.hpp"
 
 using namespace cv;
 namespace ssvo {
@@ -21,6 +22,8 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     typedef std::shared_ptr<Feature> Ptr;
+
+    Corner corner_;
 
     Vector2d px_;
     Vector3d fn_;

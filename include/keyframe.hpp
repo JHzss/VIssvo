@@ -52,7 +52,21 @@ public:
     cv::Mat descriptors_;
     unsigned int dbow_Id_;
 
+    DBoW3::BowVector bow_vec_;
+
+    DBoW3::FeatureVector feat_vec_;
+
 private:
+
+    float grid_col_inv_;
+    float grid_row_inv_;
+
+    size_t N_;
+    std::unordered_set<size_t> seeds_created_;
+
+//    std::vector<std::size_t> grid_[GRID_ROWS][GRID_COLS];
+
+
 
     std::map<KeyFrame::Ptr, int> connectedKeyFrames_;
 
@@ -61,6 +75,11 @@ private:
     bool isBad_;
 
     std::mutex mutex_connection_;
+
+public:
+//    void conputeDescriptor(const BRIEF::Ptr &brief);
+
+//    void computeBoW(const DBoW3::Vocabulary& vocabulary);
 
 };
 

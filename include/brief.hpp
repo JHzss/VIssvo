@@ -16,6 +16,8 @@ public:
         EDGE_THRESHOLD = 19,
     };
 
+//    typedef std::shared_ptr<BRIEF> Ptr;
+
     BRIEF();
 
     void compute(const std::vector<cv::Mat> &images, const std::vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors);
@@ -24,7 +26,25 @@ public:
 
     void compute(const cv::KeyPoint &kpt, const cv::Mat &img, const cv::Point *pattern, uchar *desc);
 
+//        inline static Ptr create(float scale_factor, int nlevels)
+//        { return Ptr(new BRIEF(scale_factor, nlevels));}
+
 private:
+
+//    BRIEF(float scale_factor, int nlevels);
+
+//        const float scale_factor_;
+//
+//        const int nlevels_;
+
+        std::vector<float> scale_factors_;
+
+        std::vector<float> inv_scale_factors_;
+
+        std::vector<cv::Point2i> border_tl_;
+
+        std::vector<cv::Point2i> border_br_;
+
 
     std::vector<cv::Point> pattern_;
 

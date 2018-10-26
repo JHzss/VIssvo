@@ -32,7 +32,7 @@ public:
 
     void createFeatureFromSeed(const Seed::Ptr &seed);
 
-    KeyFrame::Ptr relocalizeByDBoW(const Frame::Ptr &frame, const Corners &corners);
+    KeyFrame::Ptr relocalizeByDBoW(const Frame::Ptr &frame, const Corners &corners, std::vector<uint64_t > &frame_ids, std::vector<MapPoint::Ptr> &MapPointMatches);
 
     static LocalMapper::Ptr create(bool report = false, bool verbose = false)
     { return LocalMapper::Ptr(new LocalMapper(report, verbose));}
