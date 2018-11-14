@@ -41,11 +41,13 @@ private:
 
     void insertMapPoint(const MapPoint::Ptr &mpt);
 
-    void removeMapPoint(const MapPoint::Ptr &mpt);
+//    void removeMapPoint(const MapPoint::Ptr &mpt);
 
     inline static Map::Ptr create() {return Map::Ptr(new Map());}
 
 public:
+
+        void removeMapPoint(const MapPoint::Ptr &mpt);
 
     std::set<MapPoint::Ptr> removed_mpts_;
 

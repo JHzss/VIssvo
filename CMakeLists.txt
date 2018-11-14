@@ -175,6 +175,8 @@ LIST(APPEND SOURCEFILES
         src/so3.cpp
         src/PosePVR.cpp
         src/imudata.cpp
+        src/marginalization_factor.cpp
+        src/FeatureInWindow.cpp
 )
 
 add_library(${PROJECT_NAME} STATIC ${SOURCEFILES})

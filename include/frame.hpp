@@ -69,6 +69,8 @@ public:
 
     void getMapPoints(std::list<MapPoint::Ptr> &mpts);
 
+        void getMapPointsAndFeatures(std::list<MapPoint::Ptr> &mpts,std::list<Feature::Ptr> &fts);
+
     bool addFeature(const Feature::Ptr &ft);
 
     bool removeFeature(const Feature::Ptr &ft);
@@ -166,6 +168,7 @@ public:
     SE3d optimal_Twb_;//! for optimization
 
     double PVR[9]; //! for optimization
+
     double bgba[6];
 
     double disparity_;//! for depth filter

@@ -26,7 +26,7 @@ public:
     Corner corner_;
 
     Vector2d px_;
-    Vector3d fn_;
+    Vector3d fn_; //svo中这里是朝向特征点的长度为1的向量，这里的没仔细弄清是什么，貌似是有点区别
     int level_;
 
     //todo 这个是否要修改

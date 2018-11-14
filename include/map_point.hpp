@@ -18,6 +18,7 @@ public:
         SEED = 0,
         STABLE = 1,
         BAD = 2,
+        REMOVE = 3
     };
 
     typedef std::shared_ptr<MapPoint> Ptr;
@@ -30,9 +31,13 @@ public:
 
     void setBad();
 
+    void setRemove();
+
     void updateScale(double scale);
 
     bool isBad();
+
+    bool isSoBad();
 
     void resetType(Type type);
 
@@ -77,9 +82,18 @@ public:
         pose_[0] = x;
         pose_[1] = y;
         pose_[2] = z;
+        pose_double[0] = pose_.x();pose_double[1] = pose_.y();pose_double[2] = pose_.z();
+        optimal_pose_ = pose_;
     }
 
-    inline void setPose(const Vector3d pose) { pose_ = pose; }
+    inline void setPose(const Vector3d pose)
+    {
+        pose_ = pose;
+        optimal_pose_ = pose_;
+        pose_double[0] = pose_.x();pose_double[1] = pose_.y();pose_double[2] = pose_.z();
+    }
+
+    inline void setPose(const double *pose) { pose_ = Vector3d(pose[0],pose[1],pose[2]); optimal_pose_ = pose_; }
 
     void correctscale(double scale) { max_distance_*=scale;min_distance_*=scale; }
 
@@ -104,6 +118,10 @@ public:
     static const double log_level_factor_;
 
     Vector3d optimal_pose_;
+
+    // 优化用到的
+    double pose_double[3];
+
     double optimal_inv_z_;
     uint64_t last_structure_optimal_;
 
@@ -130,6 +148,7 @@ private:
 };
 
 typedef std::list<MapPoint::Ptr> MapPoints;
+    typedef std::list<Feature::Ptr> Features;
 
 }
 

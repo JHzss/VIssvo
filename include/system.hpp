@@ -18,6 +18,9 @@ namespace ssvo {
 
 class System: public noncopyable
 {
+
+
+
 public:
     enum Stage{
         STAGE_INITALIZE,
@@ -36,6 +39,11 @@ public:
     enum SlideWindowFlag{
         Slide_old = 0,
         Slide_new = 1
+    };
+
+    struct System_Status{
+        SlideWindowFlag slideWindowFlag;
+        MapPoints BadPoints;
     };
 
     System(std::string config_file);
@@ -95,6 +103,7 @@ private:
 
     Stage stage_;
     Status status_;
+
 
     AbstractCamera::Ptr camera_;
     FastDetector::Ptr fast_detector_;
@@ -158,6 +167,7 @@ private:
 
         //! slide window
 
+        System_Status system_status;
         SlideWindowFlag slideWindowFlag;
 
 

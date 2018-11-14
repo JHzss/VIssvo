@@ -25,6 +25,12 @@ void MapPoint::resetType(MapPoint::Type type)
     type_ = type;
 }
 
+    void MapPoint::setRemove()
+    {
+        std::lock_guard<std::mutex> lock(mutex_obs_);
+        type_ = REMOVE;
+    }
+
 void MapPoint::setBad()
 {
     std::unordered_map<KeyFramePtr, Feature::Ptr> obs;
@@ -51,6 +57,12 @@ bool MapPoint::isBad()
     std::lock_guard<std::mutex> lock(mutex_obs_);
     return type_ == BAD;
 }
+
+    bool MapPoint::isSoBad()
+    {
+        std::lock_guard<std::mutex> lock(mutex_obs_);
+        return type_ == REMOVE;
+    }
 
 KeyFrame::Ptr MapPoint::getReferenceKeyFrame()
 {
@@ -232,7 +244,7 @@ int MapPoint::predictScale(const double dist, const int max_level)
         ratio = max_distance_ / dist;
     }
 
-    int scale = round(log(ratio) / log_level_factor_);
+    int scale = round(log(ratio) / log_level_factor_); // log_level_factor_ = log（2）
     if(scale < 0)
         scale = 0;
     else if(scale > max_level)
@@ -319,6 +331,7 @@ bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe,
     double max_cos_angle = 0.0;
     for(std::pair<KeyFrame::Ptr, Feature::Ptr> item : obs)
     {
+        //! 比较的是主光轴的角度，跟SVO有一些差别
         Vector3d kf_dir(item.first->ray().normalized());
         double view_cos_angle = kf_dir.dot(frame_dir);
 
@@ -333,6 +346,7 @@ bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe,
     if(max_cos_angle < 0.5f)
         return false;
 
+    //! orb的特征点level估计方法
     level = predictScale(dist, frame->max_level_);
 
     return true;

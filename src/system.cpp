@@ -443,7 +443,7 @@ namespace ssvo{
     {
         cout/*<< fixed << setprecision(6)*/<< "Begin track "<<measurement.second.second<<"th frame."<<endl;
         cout<<"frame_num_in_window: "<<frame_num_in_window<<endl;
-        cout<<"keframe num: "<<mapper_->map_->KeyFramesInMap()<<endl;
+//        cout<<"keframe num: "<<mapper_->map_->KeyFramesInMap()<<endl;
         cout<<"initilization_frame_buffer_ num: "<<initilization_frame_buffer_.size()<<endl;
         if(!vio_init)
         {
@@ -504,22 +504,25 @@ namespace ssvo{
             if( ok1&&initilization_frame_buffer_.size()>50)
              */
             //! 50更利于imu和相机之间的初始化 20 100的效果都不如50，但是应该会根据数据集变化， 50的话是 3.95  3.96
-            if(frame_num_in_window==WINDOW_SIZE)
+            if( initilization_frame_buffer_.size()>10)
             {
-                vio_init = vio_process();
+                if(current_frame_->getRefKeyFrame()->id_ == WINDOW_SIZE) // kf0 没有放入滑动窗口中,这样判断确定滑窗中有WINDOW_SIZE个关键帧
+                {
+                    vio_init = vio_process();
 
 //                waitKey(0);
 
-                if(!vio_init)
-                {
-                    initilization_frame_buffer_.pop_front();
-                }
-                else
-                {
-                    viewer_->setTraScale(systemScale);
-                    mapper_->map_->applyScaleCorrect(systemScale);
-                    last_frame_ =initilization_frame_buffer_.back();
-                    cout<<"initilization_frame_buffer_.back() frame id:"<<current_frame_->id_<<endl;
+                    if(!vio_init)
+                    {
+                        initilization_frame_buffer_.pop_front();
+                    }
+                    else
+                    {
+                        viewer_->setTraScale(systemScale);
+                        mapper_->map_->applyScaleCorrect(systemScale);
+                        last_frame_ =initilization_frame_buffer_.back();
+                        cout<<"initilization_frame_buffer_.back() frame id:"<<current_frame_->id_<<endl;
+                    }
                 }
 
             }
@@ -611,8 +614,13 @@ namespace ssvo{
         KeyFrame::Ptr kf0 = mapper_->map_->getKeyFrame(0);
         KeyFrame::Ptr kf1 = mapper_->map_->getKeyFrame(1);
 
+
+
         firstframe_id=kf0->frame_id_;
         secondframe_id=kf1->frame_id_;
+
+        all_frame_buffer_[firstframe_id]->setRefKeyFrame(kf0);
+        all_frame_buffer_[secondframe_id]->setRefKeyFrame(kf1);
 
         LOG_ASSERT(kf0 != nullptr && kf1 != nullptr) << "Can not find intial keyframes in map!";
 
@@ -664,7 +672,7 @@ namespace ssvo{
         //! track seeds
 
         //todo 没有种子点怎么办?
-        depth_filter_->trackFrame(last_frame_, current_frame_);//追踪上一帧的种子点，添加当前帧的种子点
+        depth_filter_->trackFrame(last_frame_, current_frame_);//双向光流跟踪 追踪上一帧的种子点，添加当前帧的种子点(只有这个作用)
 
         // TODO 先验信息怎么设置？
 
@@ -689,19 +697,28 @@ namespace ssvo{
 
         //todo  here!
         //! 局部地图跟踪
-        int matches = feature_tracker_->reprojectLoaclMap(current_frame_);
 
-
-        cout<<"---------------------------------------- matches when tracking -------------------------------------"<<endl;
-
-        cout<<last_frame_->featureNumber()<<endl;
-        cout<<current_frame_->featureNumber()<<endl;
+        //todo 这里需不需要变化，因为投影的时候找的是最近的关键帧？
+        int matches;
+        if(!vio_init)
+        {
+            matches = feature_tracker_->reprojectLoaclMap(current_frame_);
+        }
+        else
+        {
+            std::set<KeyFrame::Ptr> local_keyframes;
+            for(int i = 0; i< WINDOW_SIZE ; i++)
+            {
+                local_keyframes.insert(all_frame_buffer_[frame_id_window[i]]->getRefKeyFrame());
+            }
+            matches = feature_tracker_->reprojectLoaclMap(current_frame_,local_keyframes);
+        }
 
 //    sysTrace->stopTimer("feature_reproj");
 //    sysTrace->log("num_feature_reproj", matches);
         LOG(WARNING) << "[System] Track with " << matches << " points";
 
-        cout<<"matches:"<<matches<<endl;
+        cout<<"matches:-----------------------------------------------------------------------------------------------------------"<<matches<<endl;
 
         // TODO tracking status
         if(matches < Config::minQualityFts())
@@ -711,40 +728,50 @@ namespace ssvo{
 
         //todo by jh 最主要的就是改这个函数了,注意使用上面的 vio_init
 //    cout<<"test 3"<<endl;
-        Optimizer::motionOnlyBundleAdjustment(last_frame_,current_frame_, false ,vio_init, true, true);
+        if(frame_num_in_window < WINDOW_SIZE+1)
+            Optimizer::motionOnlyBundleAdjustment(last_frame_,current_frame_, false ,vio_init, true, true);
 //    sysTrace->stopTimer("motion_ba");
 
 //    sysTrace->startTimer("per_depth_filter");
 
         //! 如果vio初始化完成，就联合优化，否则认为是还没有足够的帧用来初始化，则向slide window中插入当前帧
-        if(vio_init)
+
+        MapPoints BadPoints;
+        system_status.slideWindowFlag = slideWindowFlag;
+        system_status.BadPoints = BadPoints;
+
+
+        if(vio_init && frame_num_in_window == WINDOW_SIZE+1)
         {
 //        sysTrace->startTimer("slide window optimization");
-            Optimizer::slideWindowJointOptimization(all_frame_buffer_,frame_id_window);
+            Optimizer::slideWindowJointOptimization(all_frame_buffer_,frame_id_window,system_status);
 //        sysTrace->stopTimer("slide window optimization");
         }
 
+        for(const MapPoint::Ptr &mpt : system_status.BadPoints)
+        {
+            mapper_->map_->removeMapPoint(mpt);
+        }
+
+
         if(createNewKeyFrame(matches) )
         {
+            current_frame_->setRefKeyFrame(reference_keyframe_);
+
             slideWindowFlag = Slide_old;
 
             depth_filter_->insertFrame(current_frame_, reference_keyframe_);
 
             mapper_->insertKeyFrame(reference_keyframe_);
 
-            if(frame_num_in_window==WINDOW_SIZE+1)
-            {
-                slideWindow();
-                frame_num_in_window --;
-            }
         }
         else
         {
             slideWindowFlag = Slide_new;
             depth_filter_->insertFrame(current_frame_, nullptr);
-            slideWindow();
-            frame_num_in_window --;
         }
+
+        slideWindow();
 //    sysTrace->stopTimer("per_depth_filter");
 
 //    sysTrace->startTimer("light_affine");
@@ -1177,7 +1204,7 @@ namespace ssvo{
         //! jh change the state
 
         systemScale=(x.tail<1>())(0)/100;
-//        systemScale = 1;
+        systemScale = 1;
 
 //    waitKey(0);
 
@@ -1202,20 +1229,46 @@ namespace ssvo{
 
     void System::slideWindow()
     {
-        if(slideWindowFlag == Slide_old)
+        cout<<"id in window before:";
+        for(auto id:frame_id_window)
         {
-            for(int i=0;i<frame_num_in_window;i++)
+            cout<<" "<<id;
+        }
+        cout<<endl;
+
+        cout<<"slideWindowFlag----------------------------------->"<<slideWindowFlag<<endl;
+        if(slideWindowFlag == Slide_old  && frame_num_in_window == WINDOW_SIZE+1)
+        {
+            for(int i=0;i<frame_num_in_window-1;i++)
             {
-                frame_id_window[i]=frame_id_window[i+1];
+                frame_id_window[i] = frame_id_window[i+1];
                 swap(preintergration_in_window[i],preintergration_in_window[i+1]);
             }
 
+            frame_num_in_window --;
         }
-        else
+        else if(slideWindowFlag == Slide_new)
         {
+            //todo 
+            frame_id_window[frame_num_in_window-1] = current_frame_->id_;
             //! Slide_new
             preintergration_in_window[frame_num_in_window-2]->addAndUpdate(preintergration_in_window[frame_num_in_window-1]);
+
+
+            frame_num_in_window--;
         }
+
+        cout<<"id in window after:";
+        for(auto id:frame_id_window)
+        {
+            cout<<" "<<id;
+        }
+        cout<<endl;
+//        else
+//        {
+//            cerr<<"no other choice"<<endl;
+//        }
+
 
     }
 

@@ -1,6 +1,6 @@
 #ifndef _FEATURE_TRACKER_HPP_
 #define _FEATURE_TRACKER_HPP_
-#endif
+
 
 #include "global.hpp"
 #include "feature_detector.hpp"
@@ -33,6 +33,9 @@ public:
     typedef std::shared_ptr<FeatureTracker> Ptr;
 
     int reprojectLoaclMap(const Frame::Ptr &frame);
+
+
+        int reprojectLoaclMap(const Frame::Ptr &frame, std::set<KeyFrame::Ptr> &local_keyframes);
 
     static int reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::Ptr& mpt, Vector2d &px_cur, int &level_cur,
                                   const int max_iterations = 30, const double epslion = 0.01, const double threshold = 4.0, bool verbose = false);
@@ -73,3 +76,4 @@ private:
 };
 
 }//! end of ssvo
+#endif

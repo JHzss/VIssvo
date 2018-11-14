@@ -12,8 +12,22 @@
 #include "new_parameters.h"
 #include "preintegration.h"
 #include "utility.h"
+#include "system.hpp"
+//#include "FeatureInWindow.h"
+#include "marginalization_factor.h"
 
 namespace ssvo {
+
+    struct Info
+    {
+
+        //! ResID = nullptr 表示该特征点在滑动窗口内只有一个观测
+        MapPoint::Ptr mpt;
+        Frame::Ptr frame;
+        Feature::Ptr feature;
+        ceres::ResidualBlockId ResID;
+        bool isbad; //表示这个观测误差太大了
+    };
 
 class Optimizer: public noncopyable
 {
@@ -34,9 +48,22 @@ public:
 
     static void reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report=false, bool verbose=false);
 
+        static void slideWindowJointOptimization(vector<Frame::Ptr> &all_frame_buffer, uint64_t *frame_id_window, System::System_Status system_status);
 
 
-        static void slideWindowJointOptimization(vector<Frame::Ptr> &all_frame_buffer, uint64_t *frame_id_window);
+public:
+
+//        std::vector<MapPoint::Ptr> local_mappoints;
+//        static vector<uint64_t > mappoints_ids;
+//        static vector<pair<uint64_t ,vector<uint64_t >>> mappointID_frameIDS;
+//        static vector<pair<uint64_t ,vector<Vector3d >>> mappointfn_frameIDS;
+
+//        static vector<MapPoint::Ptr> mapPointInWindow;
+
+
+        //!增量式BA待用
+        vector<MapPoint::Ptr> new_mapPointInWindow;
+        vector<uint64_t > new_mapPointIdInWindow;
 
     };
 
@@ -142,7 +169,7 @@ public:
 
         residuals[0] *= weight_;
         residuals[1] *= weight_;
-
+//
 //        cout<<"residuals[0]:"<<residuals[0]<<endl;
 //        cout<<"residuals[1]:"<<residuals[1]<<endl;
 
@@ -456,8 +483,8 @@ private:
             Eigen::Map<const Eigen::Vector3d> Bgj(parameters[3]);
             Eigen::Map<const Eigen::Vector3d> Baj(parameters[3]+3);
 
-            Eigen::Matrix3d Ri = Sophus::SO3d::exp(PHIi).matrix();
-            Eigen::Matrix3d Rj = Sophus::SO3d::exp(PHIj).matrix();
+            Eigen::Matrix3d Ri = Sophus_new::SO3::exp(PHIi).matrix();
+            Eigen::Matrix3d Rj = Sophus_new::SO3::exp(PHIj).matrix();
 
             Eigen::Map<Eigen::Matrix<double, 9, 1>> residual(residuals);
 
@@ -480,7 +507,7 @@ private:
             Eigen::Matrix3d dv_dbg = preintegration_->jacobian_V_bg;
 
             Eigen::Vector3d rPhiij = residual.segment<3>(6);
-            Eigen::Matrix3d ExprPhiijTrans = Sophus::SO3d::exp(rPhiij).inverse().matrix();
+            Eigen::Matrix3d ExprPhiijTrans = Sophus_new::SO3::exp(rPhiij).inverse().matrix();
             Eigen::Matrix3d JrBiasGCorr = Sophus_new::SO3::JacobianR(dr_dbg * (last_frame_->preintegration->bg - preintegration_->bg_tmp));// todo 检查一下
             Eigen::Matrix3d JrInv_rPhi = Sophus_new::SO3::JacobianRInv( rPhiij );
 

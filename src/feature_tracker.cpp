@@ -47,17 +47,19 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
             last_mpts_set.insert(mpt);
     }
 
-    std::set<KeyFrame::Ptr> local_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_track_kfs);
-    local_keyframes.insert(frame->getRefKeyFrame());
 
-    if(local_keyframes.size() < options_.max_track_kfs)
-    {
-        std::set<KeyFrame::Ptr> sub_connected_keyframes = frame->getRefKeyFrame()->getSubConnectedKeyFrames(options_.max_track_kfs-local_keyframes.size());
-        for(const KeyFrame::Ptr &kf : sub_connected_keyframes)
+    std::set<KeyFrame::Ptr> local_keyframes;
+
+        local_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_track_kfs);
+        local_keyframes.insert(frame->getRefKeyFrame());
+        if(local_keyframes.size() < options_.max_track_kfs)
         {
-            local_keyframes.insert(kf);
+            std::set<KeyFrame::Ptr> sub_connected_keyframes = frame->getRefKeyFrame()->getSubConnectedKeyFrames(options_.max_track_kfs-local_keyframes.size());
+            for(const KeyFrame::Ptr &kf : sub_connected_keyframes)
+            {
+                local_keyframes.insert(kf);
+            }
         }
-    }
 
     double t1 = (double)cv::getTickCount();
 
@@ -114,6 +116,87 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     return matches_from_frame + matches_from_cell;
 }
 
+    int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame, std::set<KeyFrame::Ptr> &local_keyframes)
+    {
+        static Frame::Ptr frame_last;
+
+        double t0 = (double)cv::getTickCount();
+
+        grid_.clear();
+
+        int matches_from_frame = 0;
+        std::unordered_set<MapPoint::Ptr> last_mpts_set;
+        if(frame_last)
+        {
+            //! 上一帧所有的mpt进行图像匹配之后构造特征点添加观测
+            matches_from_frame = matchMapPointsFromLastFrame(frame, frame_last);
+            std::list<MapPoint::Ptr> last_mpts_list;
+            frame_last->getMapPoints(last_mpts_list);
+            for(const MapPoint::Ptr &mpt : last_mpts_list)
+                last_mpts_set.insert(mpt);
+        }
+
+        cout<<"mappoint from last frame: "<<matches_from_frame<<endl;
+
+
+        double t1 = (double)cv::getTickCount();
+
+        std::unordered_set<MapPoint::Ptr> local_mpts;
+        for(const KeyFrame::Ptr &kf : local_keyframes)
+        {
+            MapPoints mpts;
+            kf->getMapPoints(mpts);
+            for(const MapPoint::Ptr &mpt : mpts)
+            {
+                //! 去除掉已经从上一帧添加观测或者从上一帧观测失败的mpt
+                if(local_mpts.count(mpt) || last_mpts_set.count(mpt))
+                    continue;
+
+                local_mpts.insert(mpt);
+
+                if(mpt->isBad()) //! should not happen
+                {
+                    kf->removeMapPoint(mpt);
+                    continue;
+                }
+
+                reprojectMapPointToCell(frame, mpt);
+            }
+        }
+
+        double t2 = (double)cv::getTickCount();
+        int matches_from_cell = 0;
+        const int max_matches_rest = options_.max_matches - matches_from_frame;
+        total_project_ = 0;
+
+        std::random_shuffle(grid_order_.begin(), grid_order_.end()); /* 打乱元素 */
+        for(size_t index : grid_order_)
+        {
+            if(grid_.isMasked(index))
+                continue;
+
+            if(matchMapPointsFromCell(frame, grid_.getCell(index)))
+                matches_from_cell++;
+
+            if(matches_from_cell > max_matches_rest)
+                break;
+        }
+
+        double t3 = (double)cv::getTickCount();
+        LOG_IF(WARNING, report_) << "[ Match][*] Time: "
+                                 << (t1-t0)/cv::getTickFrequency() << " "
+                                 << (t2-t1)/cv::getTickFrequency() << " "
+                                 << (t3-t2)/cv::getTickFrequency() << " "
+                                 << ", match points " << matches_from_frame << "+" << matches_from_cell << "(" << total_project_ << ", " << local_mpts.size() << ")";
+
+        //! update last frame
+        frame_last = frame;
+
+        cout<<"mappoint from local map: "<<matches_from_cell<<endl;
+
+        return matches_from_frame + matches_from_cell;
+    }
+
 bool FeatureTracker::reprojectMapPointToCell(const Frame::Ptr &frame, const MapPoint::Ptr &point)
 {
     Vector3d pose(frame->Tcw() * point->pose());
@@ -168,12 +251,13 @@ int FeatureTracker::matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, con
     int matches_count = 0;
     for(const MapPoint::Ptr &mpt : mpts)
     {
+        // Pc = Tcw * Pw;
         const Vector3d mpt_cur = frame_cur->Tcw() * mpt->pose();
         if(mpt_cur[2] < 0.0f)
             continue;
 
-        Vector2d px_cur(frame_cur->cam_->project(mpt_cur));
-        if(!frame_cur->cam_->isInFrame(px_cur.cast<int>(), options_.border))
+        Vector2d px_cur(frame_cur->cam_->project(mpt_cur)); // 上一阵观测到的mappoint在当前帧的像素坐标点
+        if(!frame_cur->cam_->isInFrame(px_cur.cast<int>(), options_.border)) // border = 8
             continue;
 
         total_project_++;
@@ -186,6 +270,7 @@ int FeatureTracker::matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, con
         if(result != 1)
             continue;
 
+        //! 反投影到归一化平面
         Vector3d ft_cur = frame_cur->cam_->lift(px_cur);
         Feature::Ptr new_feature = Feature::create(px_cur, ft_cur, level_cur, mpt);
         frame_cur->addFeature(new_feature);
@@ -200,6 +285,18 @@ int FeatureTracker::matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, con
     return matches_count;
 }
 
+    /**
+     * @brief 获取特征点在当前帧的像素坐标
+     * @param frame           input,current frame
+     * @param mpt             input,mappoint
+     * @param px_cur          in/out, 初始值为mpt在上一帧中的像素坐标，输出为图片匹配后在当前帧中的像素坐标
+     * @param level_cur       out， image level
+     * @param max_iterations
+     * @param epslion
+     * @param threshold
+     * @param verbose
+     * @return
+     */
 int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
                                       const MapPoint::Ptr &mpt,
                                       Vector2d &px_cur,
@@ -209,14 +306,17 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
                                       const double threshold,
                                       bool verbose)
 {
-    static const int patch_size = AlignPatch::Size;
-    static const int patch_border_size = AlignPatch::SizeWithBorder;
-    const int TH_SSD = AlignPatch::Area * threshold;
+    static const int patch_size = AlignPatch::Size; // 8
+    static const int patch_border_size = AlignPatch::SizeWithBorder; // 10
+    const int TH_SSD = AlignPatch::Area * threshold; // 64*3.0
 
     KeyFrame::Ptr kf_ref;
+    //! 计算cur_frame与观察到mpt该点的特征中视角最小的一帧；
+    //! http://www.cnblogs.com/mafuqiang/p/9575599.html  SVO 特征对齐代码分析
     if(!mpt->getCloseViewObs(frame, kf_ref, level_cur))
         return -1;
 
+    //! 找到的关键帧中的该mpt对应的feature
     const Feature::Ptr ft_ref = mpt->findObservation(kf_ref);
     if(!ft_ref)
         return -1;
@@ -224,6 +324,8 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
     const Vector3d obs_ref_dir(kf_ref->pose().translation() - mpt->pose());
     const SE3d T_cur_from_ref = frame->Tcw() * kf_ref->pose();
 
+    //! 计算仿射变换矩阵2*2；
+    // warp affine
     Matrix2d A_cur_from_ref;
     utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px_, ft_ref->fn_, ft_ref->level_,
                                obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
@@ -231,11 +333,14 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
     // TODO 如果Affine很小的话，则不用warp
     const cv::Mat image_ref = kf_ref->getImage(ft_ref->level_);
     Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
+
+    //! 计算该特征的仿射变换，由当前帧到参考帧；
     utils::warpAffine<float, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
                                                 ft_ref->px_, ft_ref->level_, level_cur);
 
     const cv::Mat image_cur = frame->getImage(level_cur);
 
+    //!  px_cur should be set变换到搜索尺度下
     const double factor = static_cast<double>(1 << level_cur);
     Vector3d estimate(0,0,0); estimate.head<2>() = px_cur / factor;
 
@@ -251,6 +356,8 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
         cv::imshow("cur track", show_cur);
         cv::waitKey(0);
     }
+
+    //特征对齐,计算出当前帧像素点的精确值；(在patch上)
 
     bool matched = AlignPatch::align2DI(image_cur, patch_with_border, estimate, max_iterations, epslion, verbose);
     if(!matched)

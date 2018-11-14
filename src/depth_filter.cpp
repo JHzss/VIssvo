@@ -520,6 +520,8 @@ int DepthFilter::trackSeeds(const Frame::Ptr &frame_last, const Frame::Ptr &fram
     std::vector<cv::Point2f> pts_tracked = pts_to_track;
     std::vector<bool> status;
     static cv::TermCriteria termcrit(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, options_.klt_epslion);
+
+    //! 双向光流跟踪
     utils::kltTrack(frame_last->opticalImages(), frame_cur->opticalImages(), Frame::optical_win_size_,
                     pts_to_track, pts_tracked, status, termcrit, true, verbose_);
 

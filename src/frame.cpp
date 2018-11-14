@@ -231,6 +231,18 @@ void Frame::getMapPoints(std::list<MapPoint::Ptr> &mpts)
     for(const auto &it : mpt_fts_)
         mpts.push_back(it.first);
 }
+    void Frame::getMapPointsAndFeatures(std::list<MapPoint::Ptr> &mpts, std::list<Feature::Ptr> &fts)
+    {
+        if(!mpts.empty()) mpts.clear();
+        if(!fts.empty()) fts.clear();
+
+        std::lock_guard<std::mutex> lock(mutex_feature_);
+        for(const auto &it : mpt_fts_)
+        {
+            mpts.push_back(it.first);
+            fts.push_back(it.second);
+        }
+    }
 
 bool Frame::addFeature(const Feature::Ptr &ft)
 {
@@ -393,7 +405,7 @@ std::map<KeyFrame::Ptr, int> Frame::getOverLapKeyFrames()
         Vector3d t = Vector3d(PVR[0],PVR[1],PVR[2]);
         Vector3d w = Vector3d(PVR[6],PVR[7],PVR[8]);
 
-        Matrix3d ttttt = Sophus::SO3d::exp(w).matrix();
+        Matrix3d ttttt = Sophus_new::SO3::exp(w).matrix();
         SE3d tmp(ttttt,t);
         setTwb(tmp);
 
@@ -412,9 +424,11 @@ std::map<KeyFrame::Ptr, int> Frame::getOverLapKeyFrames()
         Vector3d t = Vector3d(PVR[0],PVR[1],PVR[2]);
         Vector3d w = Vector3d(PVR[6],PVR[7],PVR[8]);
 
-        Matrix3d ttttt = Sophus::SO3d::exp(w).matrix();
+        Matrix3d ttttt = Sophus_new::SO3::exp(w).matrix();
         SE3d tmp(ttttt,t);
+
         setTwb(tmp);
+
         v = Vector3d(PVR[3],PVR[4],PVR[5]);
 
     }

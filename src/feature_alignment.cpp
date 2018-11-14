@@ -8,6 +8,7 @@ const Pattern<float, 32, 8> AlignPattern::pattern_(pattern4);
 //
 // Align Patch
 //
+    //! 光流法的主要过程
 bool AlignPatch::align2DI(const cv::Mat &image_cur,
                           const Matrix<float, SizeWithBorder, SizeWithBorder, RowMajor> &patch_ref_with_border,
                           Vector3d &estimate,
@@ -16,24 +17,27 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
                           const bool verbose)
 {
     std::list<std::string> logs;
-    const double min_update_squared = epslion*epslion;
+    const double min_update_squared = epslion*epslion; //收敛阈值
     bool converged = false;
 
     //! get jacobian
-    float ref_patch_gx[Area] = {0.0};
+    float ref_patch_gx[Area] = {0.0}; //!两个方向的梯度 8*8
     float ref_patch_gy[Area] = {0.0};
-    const int stride = Size + 2;
-    const float* patch_ref_with_border_ptr = patch_ref_with_border.data() + stride + 1;
+    const int stride = Size + 2; // 10
+    const float* patch_ref_with_border_ptr = patch_ref_with_border.data() + stride + 1; //去除边界之后的开始的指针位置
     Matrix3f H; H.setZero();
     Vector3f J(0, 0, 1);
     for(int y = 0, i = 0; y < Size; ++y)
     {
-        const float* patch_ptr = patch_ref_with_border_ptr + y*stride;
+        const float* patch_ptr = patch_ref_with_border_ptr + y*stride; //当前像素的指针
         for(int x = 0; x < Size; ++x, ++patch_ptr, ++i)
         {
+            //计算梯度方向；
             J[0] = 0.5f * (patch_ptr[1] - patch_ptr[-1]);
             J[1] = 0.5f * (patch_ptr[stride] - patch_ptr[-stride]);
             H += J * J.transpose();
+
+            //梯度赋值，即保存每个像素点的梯度信息，因为是逆向组合算法，所以计算的是参考帧上的梯度信息；
             ref_patch_gx[i] = J[0];
             ref_patch_gy[i] = J[1];
         }
@@ -45,14 +49,19 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
 
     Vector3f update(0, 0, 0);
 
-    const int border = HalfSize + 1;
+    // 设置特征点的边界
+    const int border = HalfSize + 1; //5
     const int u_min = border;
     const int v_min = border;
     const int u_max = image_cur.cols - border;
     const int v_max = image_cur.rows - border;
+
+    //估算当前帧中的位置，因为前面的直接法已经有了光流初始值；
     float u = (float)estimate[0];
     float v = (float)estimate[1];
     float idiff = (float)estimate[2];
+
+    //开始迭代优化；
     for(int iter = 0; iter < max_iterations; iter++)
     {
 
@@ -69,10 +78,12 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
         Vector3f Jres(0, 0, 0);
         for(int y = 0, i = 0; y < Size; ++y)
         {
+            //! step 1
             const float* cur_ptr = patch_cur_ptr + y*Size;
             const float* ref_ptr = patch_ref_with_border_ptr + y*stride;
             for(int x = 0; x < Size; ++x, ++cur_ptr, ++ref_ptr, ++i)
             {
+                //! step 7
                 float res = *cur_ptr - *ref_ptr + idiff;
                 Jres[0] += ref_patch_gx[i] * res;
                 Jres[1] += ref_patch_gy[i] * res;
@@ -81,6 +92,7 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
         }
 
         //! update
+        //! Step 8
         update = Hinv * Jres;
         u -= update[0];
         v -= update[1];
@@ -98,6 +110,7 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
             logs.push_back(log);
         }
 
+        //! ||delta(p)|| < theta
         if(update.dot(update) < min_update_squared)
         {
             converged = true;

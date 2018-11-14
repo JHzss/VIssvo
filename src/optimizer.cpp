@@ -7,6 +7,8 @@
 
 namespace ssvo{
 
+ MarginalizationInfo *last_marginalization_info;
+ vector<double *> last_marginalization_parameter_blocks;
 
     void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2, bool report, bool verbose)
     {
@@ -80,10 +82,9 @@ namespace ssvo{
         Vector3d t = Vector3d(kf2->PVR[0],kf2->PVR[1],kf2->PVR[2]);
         Vector3d w = Vector3d(kf2->PVR[6],kf2->PVR[7],kf2->PVR[8]);
 
-        Matrix3d ttttt = Sophus::SO3d::exp(w).matrix();
+        Matrix3d ttttt = Sophus_new::SO3::exp(w).matrix();
 
         SE3d tmp(ttttt,t);
-
 
         kf2->setTwb(tmp);
 
@@ -109,38 +110,40 @@ namespace ssvo{
 
     void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, int min_shared_fts, bool report, bool verbose)
     {
-/*
-        cout<<"-------------------------------------localBundleAdjustment--------------------------------------"<<endl;
-        double t0 = (double)cv::getTickCount();
-        size = size > 0 ? size-1 : 0;
-        std::set<KeyFrame::Ptr> actived_keyframes = keyframe->getConnectedKeyFrames(size, min_shared_fts);
-        actived_keyframes.insert(keyframe);
-        std::unordered_set<MapPoint::Ptr> local_mappoints;
-        std::set<KeyFrame::Ptr> fixed_keyframe;
-
-        for(const KeyFrame::Ptr &kf : actived_keyframes)
+        //! 在vio初始化之前使用localba
+        if(keyframe->id_ <= WINDOW_SIZE)
         {
-            MapPoints mpts;
-            kf->getMapPoints(mpts);
-            for(const MapPoint::Ptr &mpt : mpts)
+            cout<<"-------------------------------------localBundleAdjustment--------------------------------------"<<endl;
+            double t0 = (double)cv::getTickCount();
+            size = size > 0 ? size-1 : 0;
+            std::set<KeyFrame::Ptr> actived_keyframes = keyframe->getConnectedKeyFrames(size, min_shared_fts);
+            actived_keyframes.insert(keyframe);
+            std::unordered_set<MapPoint::Ptr> local_mappoints;
+            std::set<KeyFrame::Ptr> fixed_keyframe;
+
+            for(const KeyFrame::Ptr &kf : actived_keyframes)
             {
-                local_mappoints.insert(mpt);
+                MapPoints mpts;
+                kf->getMapPoints(mpts);
+                for(const MapPoint::Ptr &mpt : mpts)
+                {
+                    local_mappoints.insert(mpt);
+                }
             }
-        }
 
-        for(const MapPoint::Ptr &mpt : local_mappoints)
-        {
-            const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
-            for(const auto &item : obs)
+            for(const MapPoint::Ptr &mpt : local_mappoints)
             {
-                if(actived_keyframes.count(item.first))
-                    continue;
+                const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+                for(const auto &item : obs)
+                {
+                    if(actived_keyframes.count(item.first))
+                        continue;
 
-                fixed_keyframe.insert(item.first);
+                    fixed_keyframe.insert(item.first);
+                }
             }
-        }
 
-        ceres::Problem problem;
+            ceres::Problem problem;
 //    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
 
 //    for(const KeyFrame::Ptr &kf : fixed_keyframe)
@@ -159,102 +162,103 @@ namespace ssvo{
 //    }
 
 
-        ceres::LocalParameterization* pvrpose = new PosePVR();
+            ceres::LocalParameterization* pvrpose = new PosePVR();
 
 
-        for(const KeyFrame::Ptr &kf : fixed_keyframe)
-        {
-            problem.AddParameterBlock(kf->PVR, 9, pvrpose);
-            problem.SetParameterBlockConstant(kf->PVR);
-        }
-
-        for(const KeyFrame::Ptr &kf : actived_keyframes)
-        {
-//        kf->optimal_Tcw_ = kf->Tcw();
-            problem.AddParameterBlock(kf->PVR, 9, pvrpose);
-            if(kf->id_ <= 1)
-                problem.SetParameterBlockConstant(kf->PVR);
-            problem.SetParameterBlockConstant(kf->PVR);
-        }
-
-        double scale = Config::imagePixelUnSigma() * 2;
-        ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
-        for(const MapPoint::Ptr &mpt : local_mappoints)
-        {
-            mpt->optimal_pose_ = mpt->pose();
-            const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
-
-            for(const auto &item : obs)
+            for(const KeyFrame::Ptr &kf : fixed_keyframe)
             {
-                const KeyFrame::Ptr &kf = item.first;
-                const Feature::Ptr &ft = item.second;
-                ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
-//            problem.AddResidualBlock(cost_function1, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
-                problem.AddResidualBlock(cost_function1, lossfunction, kf->PVR, mpt->optimal_pose_.data());
-
-
+                problem.AddParameterBlock(kf->PVR, 9, pvrpose);
+                problem.SetParameterBlockConstant(kf->PVR);
             }
-        }
 
-        ceres::Solver::Options options;
-        ceres::Solver::Summary summary;
-        options.linear_solver_type = ceres::DENSE_SCHUR;
-        options.minimizer_progress_to_stdout = report & verbose;
+            for(const KeyFrame::Ptr &kf : actived_keyframes)
+            {
+//        kf->optimal_Tcw_ = kf->Tcw();
+                problem.AddParameterBlock(kf->PVR, 9, pvrpose);
+                if(kf->id_ <= 1)
+                    problem.SetParameterBlockConstant(kf->PVR);
+                problem.SetParameterBlockConstant(kf->PVR);
+            }
 
-        ceres::Solve(options, &problem, &summary);
+            double scale = Config::imagePixelUnSigma() * 2;
+            ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
+            for(const MapPoint::Ptr &mpt : local_mappoints)
+            {
+                mpt->optimal_pose_ = mpt->pose();
+                const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
 
-        //! update pose
+                for(const auto &item : obs)
+                {
+                    const KeyFrame::Ptr &kf = item.first;
+                    const Feature::Ptr &ft = item.second;
+                    ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
+//            problem.AddResidualBlock(cost_function1, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+                    problem.AddResidualBlock(cost_function1, lossfunction, kf->PVR, mpt->optimal_pose_.data());
+
+
+                }
+            }
+
+            ceres::Solver::Options options;
+            ceres::Solver::Summary summary;
+            options.linear_solver_type = ceres::DENSE_SCHUR;
+            options.minimizer_progress_to_stdout = report & verbose;
+
+            ceres::Solve(options, &problem, &summary);
+
+            //! update pose
 //    for(const KeyFrame::Ptr &kf : actived_keyframes)
 //    {
 //        kf->setTcw(kf->optimal_Tcw_);
 //    }
 
-        for(const KeyFrame::Ptr &kf : actived_keyframes)
-        {
-            kf->updatePose();
-        }
-
-        //! update mpts & remove mappoint with large error
-        std::set<KeyFrame::Ptr> changed_keyframes;
-        static const double max_residual = Config::imagePixelUnSigma2() * std::sqrt(3.81);
-        for(const MapPoint::Ptr &mpt : local_mappoints)
-        {
-            const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
-            for(const auto &item : obs)
+            for(const KeyFrame::Ptr &kf : actived_keyframes)
             {
-                double residual = utils::reprojectError(item.second->fn_.head<2>(), item.first->Tcw(), mpt->optimal_pose_);
-                if(residual < max_residual)
-                    continue;
-
-                mpt->removeObservation(item.first);
-                changed_keyframes.insert(item.first);
-//            std::cout << " rm outlier: " << mpt->id_ << " " << item.first->id_ << " " << obs.size() << std::endl;
-
-                if(mpt->type() == MapPoint::BAD)
-                {
-                    bad_mpts.push_back(mpt);
-                }
+                kf->updatePose();
             }
 
-            mpt->setPose(mpt->optimal_pose_);
+            //! update mpts & remove mappoint with large error
+            std::set<KeyFrame::Ptr> changed_keyframes;
+            static const double max_residual = Config::imagePixelUnSigma2() * std::sqrt(3.81);
+            for(const MapPoint::Ptr &mpt : local_mappoints)
+            {
+                const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+                for(const auto &item : obs)
+                {
+                    double residual = utils::reprojectError(item.second->fn_.head<2>(), item.first->Tcw(), mpt->optimal_pose_);
+                    if(residual < max_residual)
+                        continue;
+
+                    mpt->removeObservation(item.first);
+                    changed_keyframes.insert(item.first);
+//            std::cout << " rm outlier: " << mpt->id_ << " " << item.first->id_ << " " << obs.size() << std::endl;
+
+                    if(mpt->type() == MapPoint::BAD)
+                    {
+                        bad_mpts.push_back(mpt);
+                    }
+                }
+
+                mpt->setPose(mpt->optimal_pose_);
+            }
+
+            for(const KeyFrame::Ptr &kf : changed_keyframes)
+            {
+                kf->updateConnections();
+            }
+
+            //! Report
+            double t1 = (double)cv::getTickCount();
+            LOG_IF(INFO, report) << "[Optimizer] Finish local BA for KF: " << keyframe->id_ << "(" << keyframe->frame_id_ << ")"
+                                 << ", KFs: " << actived_keyframes.size() << "(+" << fixed_keyframe.size() << ")"
+                                 << ", Mpts: " << local_mappoints.size()
+                                 << ", remove " << bad_mpts.size() << " bad mpts."
+                                 << " (" << (t1-t0)/cv::getTickFrequency() << "ms)";
+
+            reportInfo(problem, summary, report, verbose);
         }
 
-        for(const KeyFrame::Ptr &kf : changed_keyframes)
-        {
-            kf->updateConnections();
-        }
 
-        //! Report
-        double t1 = (double)cv::getTickCount();
-        LOG_IF(INFO, report) << "[Optimizer] Finish local BA for KF: " << keyframe->id_ << "(" << keyframe->frame_id_ << ")"
-                             << ", KFs: " << actived_keyframes.size() << "(+" << fixed_keyframe.size() << ")"
-                             << ", Mpts: " << local_mappoints.size()
-                             << ", remove " << bad_mpts.size() << " bad mpts."
-                             << " (" << (t1-t0)/cv::getTickFrequency() << "ms)";
-
-        reportInfo(problem, summary, report, verbose);
-
-*/
     }
     /*
 //void Optimizer::localBundleAdjustmentWithInvDepth(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, bool report, bool verbose)
@@ -527,6 +531,10 @@ namespace ssvo{
 
         ceres::Solve(options, &problem, &summary);
 
+//        cout << summary.FullReport() << endl;
+//
+//        waitKey(0);
+
         /*
 //        double sum=0;
 //        int l=0;
@@ -757,228 +765,200 @@ namespace ssvo{
         }
     }
 
-    void Optimizer::slideWindowJointOptimization(vector<Frame::Ptr> &all_frame_buffer, uint64_t *frame_id_window)
+    void Optimizer::slideWindowJointOptimization(vector<Frame::Ptr> &all_frame_buffer, uint64_t *frame_id_window,System::System_Status system_status)
     {
 
-        cout<<"-------------------------------------slideWindowJointOptimization--------------------------------------"<<endl;
-        std::unordered_set<MapPoint::Ptr> local_mappoints;
-        vector<uint64_t > mappoints_ids;
-        vector<pair<uint64_t ,vector<uint64_t >>> mappointID_frameIDS;
-        vector<pair<uint64_t ,vector<Vector3d >>> mappointfn_frameIDS;
-        ceres::Problem problem;
-        std::set<KeyFrame::Ptr> actived_keyframes;
-        std::set<KeyFrame::Ptr> fixed_keyframe;
+        //! 相机位姿、特征点pose设置没有问题
 
+        cout<<"-------------------------------------slideWindowJointOptimization--------------------------------------"<<endl;
+
+        //! 检查滑动窗口中的帧是不是正确的
+        LOG_ASSERT(all_frame_buffer.back()->id_ == frame_id_window[WINDOW_SIZE]);
+        cout<<"frame in Window: ";
+        for(int i = 0; i < WINDOW_SIZE+1; i++)
+        {
+            int id = frame_id_window[i];
+            cout<<" "<<id;
+        }
+        cout<<endl;
+        cout<<"Keyframe in Window: ";
+        for(int i = 0; i < WINDOW_SIZE+1; i++)
+        {
+            int id = all_frame_buffer[frame_id_window[i]]->getRefKeyFrame()->id_;
+            cout<<" "<<id;
+        }
+        cout<<endl;
+        cout<<"mappoint in the lastest frame: "<<all_frame_buffer[frame_id_window[WINDOW_SIZE]]->featureNumber()<<endl;
+
+        //! 将前9帧的普通帧的位姿更新成其自身关键帧的位姿
         for(int i = 0; i < WINDOW_SIZE; i++)
         {
             int id = frame_id_window[i];
-            actived_keyframes.insert(all_frame_buffer[id]->getRefKeyFrame());
+            all_frame_buffer[id]->setPose(all_frame_buffer[id]->getRefKeyFrame()->pose());
+            LOG_ASSERT(all_frame_buffer[id]->getRefKeyFrame()->frame_id_==id);
         }
 
-        for(const KeyFrame::Ptr &kf : actived_keyframes)
+        //! 将滑窗中所有帧的mapPoint的观测统一添加到Infos中，同时记录mappont的ID和观测次数
+        vector<uint64_t > mapPointIdInWindow;
+        map<uint64_t , int> mpt_obsTimes;
+        vector<Info> Infos;
+        static const double max_residual = Config::imagePixelUnSigma2() * std::sqrt(3.81);
+
+        for(int i = 0; i < WINDOW_SIZE+1; i++)
         {
+            Frame::Ptr frame = all_frame_buffer[frame_id_window[i]];
             MapPoints mpts;
-            kf->getMapPoints(mpts);
-            for(const MapPoint::Ptr &mpt : mpts)
+            Features fts;
+            frame->getMapPointsAndFeatures(mpts,fts);
+
+            MapPoints::iterator iterator1;
+            Features::iterator iterator2;
+            LOG_ASSERT(mpts.size()==fts.size());
+            for(iterator1 = mpts.begin(),iterator2=fts.begin();iterator1!=mpts.end();iterator1++,iterator2++)
             {
-                local_mappoints.insert(mpt);
-            }
-        }
-
-        for(const MapPoint::Ptr &mpt : local_mappoints)
-        {
-            const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
-            for(const auto &item : obs)
-            {
-                if(actived_keyframes.count(item.first))
-                    continue;
-                if(fixed_keyframe.count(item.first))
-                    continue;
-                fixed_keyframe.insert(item.first);
-            }
-        }
-
-
-        ceres::LocalParameterization* pvrpose = new PosePVR();
-        for(const KeyFrame::Ptr &kf : fixed_keyframe)
-        {
-            problem.AddParameterBlock(kf->PVR, 9, pvrpose);
-            problem.SetParameterBlockConstant(kf->PVR);
-        }
-
-        for(const KeyFrame::Ptr &kf : actived_keyframes)
-        {
-            problem.AddParameterBlock(kf->PVR, 9, pvrpose);
-            if(kf->id_ <= 1)
-                problem.SetParameterBlockConstant(kf->PVR);
-        }
-
-
-        //todo 理解不同的鲁棒核函数的区别
-        double scale = Config::imagePixelUnSigma() * 2;
-        ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
-        for(const MapPoint::Ptr &mpt : local_mappoints)
-        {
-            mpt->optimal_pose_ = mpt->pose();
-            const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
-
-            for(const auto &item : obs)
-            {
-                const KeyFrame::Ptr &kf = item.first;
-                const Feature::Ptr &ft = item.second;
-                ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
-                problem.AddResidualBlock(cost_function1, lossfunction, kf->PVR, mpt->optimal_pose_.data());
-            }
-        }
-
-        std::vector<Feature::Ptr> fts;
-        Frame::Ptr frame = all_frame_buffer[WINDOW_SIZE];
-        frame->getFeatures(fts);
-        const size_t N = fts.size();
-
-        for(size_t i = 0; i < N; ++i)
-        {
-            Feature::Ptr ft = fts[i];
-            MapPoint::Ptr mpt = ft->mpt_;
-            if(mpt == nullptr)
-                continue;
-            mpt->optimal_pose_ = mpt->pose();
-            ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
-            problem.AddResidualBlock(cost_function, lossfunction, frame->PVR, mpt->optimal_pose_.data());
-        }
-
-
-        //! add pose parameter
-//        for(int i = 0; i < WINDOW_SIZE+1; i++)
-//        {
-//            int id = (int)frame_id_window[i];
-//            ceres::LocalParameterization *pvrpose = new PosePVR();
-//            ceres::LocalParameterization *biaspose = new PoseBias();
-//            problem.AddParameterBlock(all_frame_buffer[id]->PVR,9,pvrpose);
-//            problem.AddParameterBlock(all_frame_buffer[i]->bgba,6,biaspose);
-//        }
-
-        //! add imu
-
-//        for(int i = 0; i < WINDOW_SIZE; i++)
-//        {
-//            int id_i = frame_id_window[i];
-//            int id_j = frame_id_window[i+1];
-//
-//            cout<<"imu residual id_i: "<<id_i<<endl;
-//            cout<<"imu residual id_j: "<<id_j<<endl;
-//            Frame::Ptr last_frame = all_frame_buffer[id_i];
-//            Frame::Ptr frame = all_frame_buffer[id_j];
-//            //! imu误差
-//            ceres::CostFunction* imu_factor = new ceres_slover::IMUError(last_frame,frame);
-//            problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,last_frame->bgba,frame->PVR,frame->bgba);
-//
-//            //! bias误差
-//            ceres::CostFunction* bias_factor = new ceres_slover::BiasError(frame->preintegration);
-//            problem.AddResidualBlock(bias_factor,NULL,last_frame->bgba,frame->bgba);
-//        }
-
-        //! add feature
-        //TODO 需要加一个特征点在滑窗内的匹配,需要用特征点的描述子进行匹配
-
-//        map<uint64_t ,int > mptID_times;
-//
-//        for(int i = 0; i < WINDOW_SIZE+1 ; i++)
-//        {
-//            int id = frame_id_window[i];
-//            std::vector<Feature::Ptr> fts;
-//            Frame::Ptr frame = all_frame_buffer[id];
-//            frame->getFeatures(fts);
-//            cout<<"frame id:------------------------------"<<frame->id_<<endl;
-//            const size_t N = fts.size();
-//            for(int j = 0; j < N ; j++)
-//            {
-//                Feature::Ptr &ft = fts[j];
-//                MapPoint::Ptr &mpt = ft->mpt_;
-//                ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
-//                problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
-//
-//            }
-//
-//        }
-
-        /*
-        map<uint64_t ,int > mptID_times;
-        for(int i = 0; i< WINDOW_SIZE+1; i++ )
-        {
-            int id = frame_id_window[i];
-            std::vector<Feature::Ptr> fts;
-            Frame::Ptr frame = all_frame_buffer[id];
-            frame->getFeatures(fts);
-            const size_t N = fts.size();
-//        std::vector<ceres::ResidualBlockId> res_ids(N);
-            for(size_t j = 0; j < N; ++j)
-            {
-                Feature::Ptr ft = fts[j];
-                MapPoint::Ptr mpt = ft->mpt_;
-
-                if(mpt == nullptr)
-                    continue;
-
-                vector<uint64_t >::iterator it = find(mappoints_ids.begin(), mappoints_ids.end(), mpt->id_);
-
-                if(it==mappoints_ids.end())
+                MapPoint::Ptr mpt = *iterator1;
+                Feature::Ptr ft = *iterator2;
+                //! 如果mappoint质量不好就不要
+//                if(mpt->isBad())
+//                    continue;
+                Info info;
+                info.isbad = false;
+                info.mpt = mpt;
+                info.frame = frame;
+                info.feature = ft;
+                Infos.push_back(info);
+                //todo
+                //如果还没有添加过该mpt，就添加，否则观测次数增加
+                if(find(mapPointIdInWindow.begin(),mapPointIdInWindow.end(),mpt->id_)==mapPointIdInWindow.end())
                 {
-                    mptID_times[mpt->id_]=0;
-                    vector<uint64_t> frame_ids;
-                    frame_ids.push_back(frame->id_);
-                    mappointID_frameIDS.push_back(make_pair(mpt->id_,frame_ids));
-
-                    vector<Vector3d> frame_fns;
-                    frame_fns.push_back(ft->fn_);
-                    mappointfn_frameIDS.push_back(make_pair(mpt->id_,frame_fns));
-
-
-                    local_mappoints.push_back(mpt);
-                    mappoints_ids.push_back(mpt->id_);
-
-                    mptID_times[mpt->id_]++;
+                    mapPointIdInWindow.push_back(mpt->id_);
+                    mpt_obsTimes[mpt->id_] = 1;
                 }
                 else
                 {
-                    for(int i=0;i<mappointID_frameIDS.size();i++)
-                    {
-                        if(mappointID_frameIDS[i].first==mpt->id_)
-                        {
-                            mptID_times[mpt->id_]++;
-                            mappointID_frameIDS[i].second.push_back(frame->id_);
-                            mappointfn_frameIDS[i].second.push_back(ft->fn_);
-                            break;
-                        }
-                    }
+                    mpt_obsTimes[mpt->id_]++;
+                }
+                //todo记录更多的信息
+            }
+        }
+
+        cout<<"Infos size-----------------------------------------------------------------: "<<Infos.size()<<endl;
+        //! 构造problem
+        ceres::Problem problem;
+        double scale = Config::imagePixelUnSigma() * 2;
+        //todo 理解不同的鲁棒核函数的区别
+        ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
+
+//        if (last_marginalization_info)
+//        {
+//            // construct new marginlization_factor
+//            MarginalizationFactor *marginalization_factor = new MarginalizationFactor(last_marginalization_info);
+//            problem.AddResidualBlock(marginalization_factor, NULL, last_marginalization_parameter_blocks);
+//        }
+
+        for(int i = 0; i < WINDOW_SIZE+1; i++)
+        {
+            ceres::LocalParameterization* pvrpose = new PosePVR();
+            int id = frame_id_window[i];
+            problem.AddParameterBlock(all_frame_buffer[id]->PVR,9,pvrpose);
+            //todo test
+//            if(i< WINDOW_SIZE)
+//                problem.SetParameterBlockConstant(all_frame_buffer[id]->PVR);
+            if(all_frame_buffer[id]->getRefKeyFrame()->id_<=1)
+            {
+                problem.SetParameterBlockConstant(all_frame_buffer[id]->PVR);
+            }
+        }
+        int residual_num = 0;
+        for(auto &info:Infos)
+        {
+            MapPoint::Ptr mpt = info.mpt;
+            Frame::Ptr frame = info.frame;
+            Feature::Ptr feature = info.feature;
+            LOG_ASSERT(mpt->id_ == feature->mpt_->id_);
+            mpt->optimal_pose_ = mpt->pose();
+            mpt->pose_double[0] = mpt->pose().x();mpt->pose_double[1] = mpt->pose().y();mpt->pose_double[2] = mpt->pose().z();
+
+            info.ResID = nullptr;
+//            if(mpt->isSoBad())continue;
+            if(mpt_obsTimes[info.mpt->id_]<2 || info.mpt->getReferenceKeyFrame()->frame_id_>=frame_id_window[WINDOW_SIZE-2])
+            {
+                continue;
+            }
+
+            ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(feature->fn_[0]/feature->fn_[2], feature->fn_[1]/feature->fn_[2]);//, 1.0/(1<<ft->level_));
+            info.ResID = problem.AddResidualBlock(cost_function, lossfunction, frame->PVR, mpt->pose_double);
+//            info.ResID = problem.AddResidualBlock(cost_function, lossfunction, frame->PVR, mpt->optimal_pose_.data());
+//            problem.SetParameterBlockConstant(mpt->pose_double);
+            residual_num ++;
+        }
+
+//        waitKey(0);
+        std::set<KeyFrame::Ptr> changed_keyframes;
+        double TH_REPJ = 3.81 * Config::imagePixelUnSigma2();
+        for(auto &info:Infos)
+        {
+            if(info.ResID == nullptr)continue;
+            MapPoint::Ptr mpt = info.mpt;
+            Frame::Ptr frame = info.frame;
+            Feature::Ptr feature = info.feature;
+
+//            if(frame->id_ == frame_id_window[WINDOW_SIZE]) TH_REPJ *= 2;
+
+            if(reprojectionError(problem, info.ResID).squaredNorm() > TH_REPJ * (1 << feature->level_))
+            {
+                info.isbad = true;
+                std::cout << " rm outlier: mpt " << mpt->id_ << " in " << frame->id_ << " error " << reprojectionError(problem, info.ResID).squaredNorm() * 460 * 460 << std::endl;
+
+                problem.RemoveResidualBlock(info.ResID);
+                if(mpt->type() == MapPoint::BAD)
+                {
+                    //todo 需要重新考虑一下
+//                    mpt->setRemove();
+                    system_status.BadPoints.push_back(mpt);
                 }
             }
 
         }
-        cout<<" mappoint size: "<<local_mappoints.size()<<endl;
 
 
 
-        for(int i=0;i<local_mappoints.size();i++)
+        //! add imu
+        /*
+        for(int i = 0; i < WINDOW_SIZE; i++)
         {
+            int id_i = frame_id_window[i];
+            int id_j = frame_id_window[i+1];
 
-            MapPoint::Ptr mpt = local_mappoints[i];
-            if(mptID_times[mpt->id_]<2||mpt->getReferenceKeyFrame()->frame_id_>frame_id_window[WINDOW_SIZE-2])continue;
+            cout<<"imu residual id_i: "<<id_i<<endl;
+            cout<<"imu residual id_j: "<<id_j<<endl;
+            Frame::Ptr last_frame = all_frame_buffer[id_i];
+            Frame::Ptr frame = all_frame_buffer[id_j];
+            //! imu误差
+            ceres::CostFunction* imu_factor = new ceres_slover::IMUError(last_frame,frame);
+            problem.AddResidualBlock(imu_factor,NULL,last_frame->PVR,last_frame->bgba,frame->PVR,frame->bgba);
 
-//            cout<<"被观测次数： "<<mptID_times[mpt->id_]<<endl;
-
-            mpt->optimal_pose_ = mpt->pose();
-//            cout<<"mappoint id: "<<mpt->id_<<endl;
-            for(int j = 0;j<mappointID_frameIDS[i].second.size();j++)
-            {
-                Vector3d fn = mappointfn_frameIDS[i].second[j];
-                ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(fn[0]/fn[2], fn[1]/fn[2]);//, 1.0/(1<<ft->level_));
-                problem.AddResidualBlock(cost_function1, lossfunction, all_frame_buffer[mappointID_frameIDS[i].second[j]]->PVR, mpt->optimal_pose_.data());
-            }
+            //! bias误差
+            ceres::CostFunction* bias_factor = new ceres_slover::BiasError(frame->preintegration);
+            problem.AddResidualBlock(bias_factor,NULL,last_frame->bgba,frame->bgba);
         }
+         */
 
+        double sum=0;
+        int l=0;
+        std::vector<ceres::ResidualBlockId> ids;
+        problem.GetResidualBlocks(&ids);
+        for (auto & id: ids)
+        {
+            cout<<l<<":   ";
+            sum += (reprojectionError(problem, id).transpose() * reprojectionError(problem, id));
+            cout<< (reprojectionError(problem, id).transpose() * reprojectionError(problem, id))* 460 * 460<<endl;
+            l++;
+        }
+//        cout<<"residual num: "<<residual_num<<endl;
+        cout<<"sum "<<l<<" "<<sum* 460 * 460<<endl;
+//        cout<<"视觉误差量个数："<<N<<endl;
 
-        */
         //todo 先验误差、闭环误差
 
         ceres::Solver::Options options;
@@ -987,37 +967,114 @@ namespace ssvo{
         options.max_linear_solver_iterations = 20;
 
         ceres::Solve(options, &problem, &summary);
-
-
-        double sum=0;
-        int l=0;
-        std::vector<ceres::ResidualBlockId> ids;
-        problem.GetResidualBlocks(&ids);
-        for (auto & id: ids)
-        {
-//            cout<<l<<":   ";
-            sum += (reprojectionError(problem, id).transpose() * reprojectionError(problem, id));
-//            cout<< reprojectionError(problem, id).transpose() * reprojectionError(problem, id)<<endl;
-            l++;
-        }
-
-        cout<<"sum "<<l<<" "<<sum<<endl;
-//        cout<<"视觉误差量个数："<<N<<endl;
         cout << summary.FullReport() << endl;
 //        waitKey(0);
 
+        //todo 这个是优化后的误差。。
+        /*
+        ids.clear();
+        problem.GetResidualBlocks(&ids);
 
-//        waitKey(0);
-
-//        for(int i=0;i<WINDOW_SIZE+1;i++)
-//        {
-//            int id = frame_id_window[i];
-//            all_frame_buffer[id]->updatePose();
-//        }
-        for(const KeyFrame::Ptr &kf : actived_keyframes)
+        static const double TH_REPJ = 3.81 * Config::imagePixelUnSigma2();
+        for (auto & id: ids)
         {
-            kf->updatePose();
+            if(reprojectionError(problem, id).squaredNorm() > TH_REPJ)
+            {
+                problem.RemoveResidualBlock(id);
+            }
         }
+
+        ceres::Solve(options, &problem, &summary);
+        cout << summary.FullReport() << endl;
+        waitKey(0);
+         */
+
+//        all_frame_buffer[frame_id_window[10]]->updatePose();
+        for(int i=0;i<WINDOW_SIZE+1;i++)
+        {
+            int id = frame_id_window[i];
+            all_frame_buffer[id]->updatePose();
+
+            //!注意更新关键帧的位姿
+            if(i < WINDOW_SIZE)
+            {
+                LOG_ASSERT(all_frame_buffer[id]->getRefKeyFrame()->frame_id_==id);
+                all_frame_buffer[id]->getRefKeyFrame()->setPose(all_frame_buffer[id]->pose());
+            }
+
+        }
+
+        for(auto &info:Infos)
+        {
+            if(info.ResID== nullptr)continue;
+            if(info.isbad== true)continue;
+            MapPoint::Ptr mpt = info.mpt;
+            Frame::Ptr frame = info.frame;
+            Feature::Ptr feature = info.feature;
+
+//            double residual = utils::reprojectError(feature->fn_.head<2>(), frame->Tcw(), mpt->optimal_pose_);
+            static const double TH_REPJ = std::sqrt(3.81) * Config::imagePixelUnSigma2();
+
+            if(reprojectionError(problem, info.ResID).squaredNorm() > TH_REPJ * (1 << feature->level_))
+            {
+                info.isbad = true;
+                problem.RemoveResidualBlock(info.ResID);
+//            std::cout << " rm outlier: " << mpt->id_ << " " << item.first->id_ << " " << obs.size() << std::endl;
+//                mpt->removeObservation(frame->getRefKeyFrame());
+//                changed_keyframes.insert(frame->getRefKeyFrame());
+//                frame->removeMapPoint(mpt);
+
+                if(mpt->type() == MapPoint::BAD)
+                {
+                    //todo 需要重新考虑一下
+//                    mpt->setRemove();
+                    system_status.BadPoints.push_back(mpt);
+                }
+            }
+
+//            mpt->setPose(mpt->optimal_pose_);
+            mpt->setPose(mpt->pose_double);
+        }
+
+        ceres::Solve(options, &problem, &summary);
+        cout << summary.FullReport() << endl;
+
+        for(int i=0;i<WINDOW_SIZE+1;i++)
+        {
+            int id = frame_id_window[i];
+            all_frame_buffer[id]->updatePose();
+
+            //!注意更新关键帧的位姿
+            if(i<WINDOW_SIZE)
+            {
+                LOG_ASSERT(all_frame_buffer[id]->getRefKeyFrame()->frame_id_==id);
+                all_frame_buffer[id]->getRefKeyFrame()->setPose(all_frame_buffer[id]->pose());
+            }
+
+        }
+        for(auto &info:Infos)
+        {
+            if(info.ResID == nullptr)continue;
+            MapPoint::Ptr mpt = info.mpt;
+            Frame::Ptr frame = info.frame;
+            if(info.isbad)
+            {
+                mpt->removeObservation(frame->getRefKeyFrame());
+                changed_keyframes.insert(frame->getRefKeyFrame());
+                frame->removeMapPoint(mpt);
+                continue; //! 本次mappoint的观测失败，不用来更新mappoint位姿
+            }
+            mpt->setPose(mpt->pose_double);
+        }
+
+        for(const KeyFrame::Ptr &kf : changed_keyframes)
+        {
+            kf->updateConnections();
+        }
+
+        waitKey(0);
+
+        //! 更新位姿
 
 
         //todo pvr bgba -> pose,ba,bg
@@ -1028,36 +1085,186 @@ namespace ssvo{
 //        }
 
         //! update mpts & remove mappoint with large error
-//        std::set<KeyFrame::Ptr> changed_keyframes;
-//        static const double max_residual = Config::imagePixelUnSigma2() * std::sqrt(3.81);
-        for(const MapPoint::Ptr &mpt : local_mappoints)
+/*
+        int badnum = 0;
+        for(auto &info : Infos)
         {
-//            const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
-//            for(const auto &item : obs)
-//            {
-//                double residual = utils::reprojectError(item.second->fn_.head<2>(), item.first->Tcw(), mpt->optimal_pose_);
-//                if(residual < max_residual)
-//                    continue;
-//
-//                mpt->removeObservation(item.first);
-//                changed_keyframes.insert(item.first);
-////            std::cout << " rm outlier: " << mpt->id_ << " " << item.first->id_ << " " << obs.size() << std::endl;
-//
-////            if(mpt->type() == MapPoint::BAD)
-////            {
-////                bad_mpts.push_back(mpt);
-////            }
-//            }
+            if(info.ResID == nullptr)continue;
+//            cout<<"----------------------------------set bad point ---------------------------------------"<<endl;
+            MapPoint::Ptr mpt = info.mpt;
+            Frame::Ptr frame = info.frame;
+            Feature::Ptr feature = info.feature;
 
-            mpt->setPose(mpt->optimal_pose_);
+            double residual = utils::reprojectError(feature->fn_.head<2>(), frame->Tcw(), mpt->optimal_pose_);
+            if(residual < max_residual)
+            {
+//                info.mpt->setPose(info.mpt->pose_double);
+//                info.mpt->setPose(info.mpt->optimal_pose_);
+                continue;
+            }
+            else
+            {
+                problem.RemoveResidualBlock(info.ResID);
+                badnum ++;
+                cout<<"----------------------------------set bad point --------------------------"<<mpt->id_<<" : "<<residual*460*460<<endl;
+                mpt->removeObservation(frame->getRefKeyFrame());
+
+                frame->removeMapPoint(mpt);
+//                mpt->setBad();
+//                system_status.BadPoints.push_back(mpt);
+
+            }
+
         }
+        cout<<"badnum: "<<badnum<<endl;*/
+//        waitKey(0);
+
+//        ceres::Solve(options, &problem, &summary);
+//        cout << summary.FullReport() << endl;
+
+/*
+        for(int i=0;i<WINDOW_SIZE+1;i++)
+        {
+            int id = frame_id_window[i];
+            all_frame_buffer[id]->updatePose();
+
+            //!注意更新关键帧的位姿
+            if(i<WINDOW_SIZE)
+            {
+                LOG_ASSERT(all_frame_buffer[id]->getRefKeyFrame()->frame_id_==id);
+                all_frame_buffer[id]->getRefKeyFrame()->setPose(all_frame_buffer[id]->pose());
+            }
+
+        }
+
+        for(auto &info : Infos)
+        {
+            if(info.ResID == nullptr) continue;
+            MapPoint::Ptr mpt = info.mpt;
+//            info.mpt->setPose(info.mpt->pose_double);
+            info.mpt->setPose(info.mpt->optimal_pose_);
+        }
+        */
+
+
+
+//        waitKey(0);
 
 //        for(const KeyFrame::Ptr &kf : changed_keyframes)
 //        {
 //            kf->updateConnections();
 //        }
-
+//------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         //todo 封装先验误差
+/*
+        if(system_status.slideWindowFlag == System::Slide_old)
+        {
+            MarginalizationInfo *marginalization_info = new MarginalizationInfo();//新建一个要边缘化的信息,就是封装先验存储的地方
+
+            if (last_marginalization_info)
+            {
+                vector<int> drop_set;
+                for (int i = 0; i < static_cast<int>(last_marginalization_parameter_blocks.size()); i++)
+                {
+                    //参数块里没有特征点的深度，所以不需要加进去
+                    if (last_marginalization_parameter_blocks[i] == all_frame_buffer[frame_id_window[0]]->PVR)
+                        drop_set.push_back(i);
+                }
+                // construct new marginlization_factor
+                MarginalizationFactor *marginalization_factor = new MarginalizationFactor(last_marginalization_info);
+                ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(marginalization_factor, NULL,
+                                                                               last_marginalization_parameter_blocks,
+                                                                               drop_set);
+                marginalization_info->addResidualBlockInfo(residual_block_info);//todo 先验信息的残差，暂时先放下
+            }
+
+
+            vector<Info> infos_marg;
+            for(auto &info:Infos)
+            {
+                if(info.mpt->getReferenceKeyFrame()->frame_id_ != frame_id_window[0] || mpt_obsTimes[info.mpt->id_]<2) continue;
+
+                MapPoint::Ptr mpt = info.mpt;
+                Frame::Ptr frame = info.frame;
+                Feature::Ptr feature = info.feature;
+                vector<int> drop_set;
+
+                if(frame->id_ == frame_id_window[0]) drop_set = {0,1};
+                    else drop_set = {1};
+
+
+                ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(feature->fn_[0]/feature->fn_[2], feature->fn_[1]/feature->fn_[2]);//, 1.0/(1<<ft->level_));
+                ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(cost_function,lossfunction,
+                                                                               vector<double *>{frame->PVR, mpt->pose_double},
+                                                                               drop_set);
+
+                marginalization_info->addResidualBlockInfo(residual_block_info);//todo 先验信息的残差，暂时先放下
+            }
+
+            //@brief 计算每一块残差块的雅克比矩阵和残差，并将参数块的信数值添加进去，用于之后的残差的更新
+            marginalization_info->preMarginalize();
+
+            marginalization_info->marginalize();
+
+            vector<double *> parameter_blocks;
+            marginalization_info->saveKeep();
+
+            for (int i = 1; i <= WINDOW_SIZE; i++)
+            {
+                double *addr = all_frame_buffer[frame_id_window[i]]->PVR;
+                parameter_blocks.push_back(addr);
+            }
+
+            if (last_marginalization_info)
+                delete last_marginalization_info;
+            last_marginalization_info = marginalization_info;
+            last_marginalization_parameter_blocks = parameter_blocks;//这个参数块是指保留下来的参数块的指针，因为在slidewindow中，进行了swap，所以地址和内容是对应的
+
+        }
+        else
+        {
+            if (last_marginalization_info &&
+                std::count(std::begin(last_marginalization_parameter_blocks), std::end(last_marginalization_parameter_blocks), all_frame_buffer[frame_id_window[WINDOW_SIZE - 1]]->PVR))
+            {
+                MarginalizationInfo *marginalization_info = new MarginalizationInfo();
+                if (last_marginalization_info)
+                {
+                    vector<int> drop_set;
+                    for (int i = 0; i < static_cast<int>(last_marginalization_parameter_blocks.size()); i++)
+                    {
+                        if (last_marginalization_parameter_blocks[i] == all_frame_buffer[frame_id_window[WINDOW_SIZE - 1]]->PVR)
+                            drop_set.push_back(i);
+                    }
+                    // construct new marginlization_factor
+                    MarginalizationFactor *marginalization_factor = new MarginalizationFactor(last_marginalization_info);
+                    ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(marginalization_factor, NULL,
+                                                                                   last_marginalization_parameter_blocks,
+                                                                                   drop_set);
+
+                    marginalization_info->addResidualBlockInfo(residual_block_info);
+                }
+
+
+                marginalization_info->preMarginalize();
+
+                marginalization_info->marginalize();
+
+//                vector<double *> parameter_blocks = marginalization_info->getParameterBlocks(addr_shift);
+                vector<double *> parameter_blocks;
+                marginalization_info->saveKeep();
+                for (int i = 0; i <= WINDOW_SIZE; i++)
+                {
+                    double *addr = all_frame_buffer[frame_id_window[i]]->PVR;
+                    parameter_blocks.push_back(addr);
+                }
+                if (last_marginalization_info)
+                    delete last_marginalization_info;
+                last_marginalization_info = marginalization_info;
+                last_marginalization_parameter_blocks = parameter_blocks;
+
+            }
+        }
+*/
 
 
     }

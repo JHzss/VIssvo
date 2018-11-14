@@ -64,7 +64,7 @@ int AlignSE3::run(Frame::Ptr reference_frame,
     cout<<"---------------------------begin run align----------------------"<<endl;
     logs_.clear();
     double epslion_squared = epslion * epslion;
-    ref_frame_ = reference_frame;
+    ref_frame_ = reference_frame; //! 前一帧作为参考帧
     cur_frame_ = current_frame;
 
     std::vector<Feature::Ptr> fts;
@@ -79,6 +79,7 @@ int AlignSE3::run(Frame::Ptr reference_frame,
 
 
     cout<<"ref_frame_ size: "<<N<<endl;
+    //! 意味着上一帧中没有mappoint
     LOG_ASSERT(N != 0) << " AlignSE3: Frame(" << reference_frame->id_ << ") " << " no features to track!";
     const int max_level = (int)cur_frame_->images().size() - 1;
     LOG_ASSERT(max_level >= top_level && bottom_level >= 0 && bottom_level <= top_level) << " Error align level from top " << top_level << " to bottom " << bottom_level;
@@ -255,6 +256,19 @@ int getBestSearchLevel(const Matrix2d& A_cur_ref, const int max_level)
     return search_level;
 }
 
+    /**
+     * 参考：https://blog.csdn.net/zhubaohua_bupt/article/details/74911000
+     * 计算仿射变换矩阵2*2,即patch因为视角的变换，应该具有一定的扭曲
+     * @param cam_ref
+     * @param cam_cur
+     * @param px_ref
+     * @param f_ref
+     * @param level_ref 特征点在关键帧中的level
+     * @param depth_ref
+     * @param T_cur_ref
+     * @param patch_size
+     * @param A_cur_ref out 仿射变换矩阵
+     */
 void getWarpMatrixAffine(const AbstractCamera::Ptr &cam_ref,
                          const AbstractCamera::Ptr &cam_cur,
                          const Vector2d &px_ref,
@@ -265,16 +279,32 @@ void getWarpMatrixAffine(const AbstractCamera::Ptr &cam_ref,
                          const int patch_size,
                          Matrix2d &A_cur_ref)
 {
+    //5*5的窗口
     const double half_patch_size = static_cast<double>(patch_size+2)/2;
+    //归一化的相机坐标乘以深度,得到的是Pc？depth_ref为什么是深度值啊
     const Vector3d xyz_ref(depth_ref * f_ref);
     const double length = half_patch_size * (1 << level_ref);
+
+    //u方向的边界点和v方向的边界点，注意特征所在的金字塔level
     Vector3d xyz_ref_du(cam_ref->lift(px_ref + Vector2d(length, 0)));
+//  patch tranfrom to the level0 pyr img
     Vector3d xyz_ref_dv(cam_ref->lift(px_ref + Vector2d(0, length)));
+
+        //  px_ref is located at level0
+        //  attation!!!! so, A_cur_ref  is only used to affine warp patch at level0
+
+
+    //因为xyz_du_ref返回的是归一化的3D坐标，所以要借助xyz_ref点的深度计算；
     xyz_ref_du *= xyz_ref[2]/xyz_ref_du[2];
     xyz_ref_dv *= xyz_ref[2]/xyz_ref_dv[2];
+
+
+    //上面的三个点分别投影到当前帧；
     const Vector2d px_cur(cam_cur->project(T_cur_ref * xyz_ref));
     const Vector2d px_du(cam_cur->project(T_cur_ref * xyz_ref_du));
     const Vector2d px_dv(cam_cur->project(T_cur_ref * xyz_ref_dv));
+
+    //仿射变换，其实是一种在x和y方向的变化率；
     A_cur_ref.col(0) = (px_du - px_cur)/half_patch_size;
     A_cur_ref.col(1) = (px_dv - px_cur)/half_patch_size;
 }
